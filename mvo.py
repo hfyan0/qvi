@@ -1,24 +1,46 @@
 #!/usr/bin/env python
 
+import sys
 import math
 import numpy as np
 import cvxopt
 from cvxopt import blas, solvers
 from configobj import ConfigObj
-from datetime import datetime
+from datetime import datetime, timedelta
 
 def read_file(file_loc):
     with open(file_loc,'r') as f:
         return [line.split(',') for line in f]
 
+def justify_str(s,totlen,left_right,padchar):
+    def extra(s,totlen):
+        return ''.join(map(lambda x: padchar, range(totlen - len(s))))
+    s = str(s)
+    if left_right == "left":
+        return s + extra(s,totlen)
+    elif left_right == "right":
+        return extra(s,totlen) + s
+    else:
+        return s
+
+def intWithCommas(x):
+    if type(x) not in [type(0), type(0L)]:
+        raise TypeError("Parameter must be an integer.")
+    if x < 0:
+        return '-' + intWithCommas(-x)
+    result = ''
+    while x >= 1000:
+        x, r = divmod(x, 1000)
+        result = ",%03d%s" % (r, result)
+    return "%d%s" % (x, result)
+
 def calc_return_list(price_list):
-    return map(lambda x: (x[0]/x[1])-1, zip(price_list[1:], price_list[:-1]))
+    return map(lambda x: (x[0]/x[1])-1.0, zip(price_list[1:], price_list[:-1]))
 
 def calc_correl(ts_a,ts_b):
     common_date_set = set(map(lambda x: x[0], ts_a)).intersection(set(map(lambda x: x[0], ts_b)))
     a_ext = map(lambda x: x[1], filter(lambda x: x[0] in common_date_set, ts_a))
     b_ext = map(lambda x: x[1], filter(lambda x: x[0] in common_date_set, ts_b))
-
     return round(np.corrcoef(calc_return_list(a_ext),calc_return_list(b_ext))[0][1],5)
 
 def calc_var(ts):
@@ -39,7 +61,7 @@ def get_annualization_factor(date_list):
     else:
         return 12
 
-def calc_cov_matrix_annualized(sym_time_series_list):
+def calc_cov_matrix_annualized(symbol_list, sym_time_series_list, riskiness_list):
     ###################################################
     # correlation matrix
     ###################################################
@@ -48,10 +70,14 @@ def calc_cov_matrix_annualized(sym_time_series_list):
 
     print
     print "correl_matrix"
-    np.set_printoptions(precision=3)
-    print np.asmatrix(correl_matrix)
-    ###################################################
+    np.set_printoptions(precision=3,suppress=True)
+    for row in correl_matrix.tolist():
+        for element in row:
+            str_element = str(round(element,3))
+            sys.stdout.write(justify_str(str_element,8,"right",' '))
+        sys.stdout.write('\n')
 
+    ###################################################
     # covariance matrix
     ###################################################
     sd_list = np.asarray(map(lambda ts: calc_sd(map(lambda x: x[1], ts)), sym_time_series_list))
@@ -59,23 +85,26 @@ def calc_cov_matrix_annualized(sym_time_series_list):
     annualized_sd_list = map(lambda x: x[0]*math.sqrt(x[1]), zip(sd_list,annualization_factor_list))
     print
     print "annualized_sd_list"
-    print map(lambda x: round(x,3), annualized_sd_list)
+    print '\n'.join(map(lambda x: x[0]+' '+x[1], zip(symbol_list,map(lambda x: str(round(x,4)*100)+'%', annualized_sd_list))))
+
+    annualized_sd_list = map(lambda x: x[0]*x[1], zip(annualized_sd_list,riskiness_list))
+    print
+    print "annualized_sd_list (after adjustment for riskiness)"
+    print '\n'.join(map(lambda x: x[0]+' '+x[1], zip(symbol_list,map(lambda x: str(round(x,4)*100)+'%', annualized_sd_list))))
     D = np.diag(annualized_sd_list)
     return (D * correl_matrix * D)
 
 def calc_mean_vec(sym_time_series_list):
     return map(lambda ts: sum(map(lambda x: x[1], ts))/len(ts), sym_time_series_list)
 
-def markowitz(px_return_list,cov_matrix,mu_p):
+def markowitz(symbol_list,px_return_list,cov_matrix,mu_p):
     def iif(cond, iftrue=1.0, iffalse=0.0):
         if cond:
             return iftrue
         else:
             return iffalse
 
-    solvers.options['show_progress'] = False
-
-    n = len(sym_time_series_list)
+    n = len(symbol_list)
 
     P = cvxopt.matrix(cov_matrix)
     q = cvxopt.matrix([0.0 for i in range(n)])
@@ -89,10 +118,10 @@ def markowitz(px_return_list,cov_matrix,mu_p):
     h = cvxopt.matrix([ iif(j % 2) for j in range(2*n) ])
     # A and b determine the equality constraints defined as A x = b
     A = cvxopt.matrix([[ 1.0 for i in range(n) ],
-                px_return_list
-                ]).trans()
+                px_return_list]).trans()
     b = cvxopt.matrix([ 1.0, float(mu_p) ])
 
+    solvers.options['show_progress'] = False
     sol = solvers.qp(P, q, G, h, A, b)
 
     # if sol['status'] != 'optimal':
@@ -105,17 +134,14 @@ def markowitz(px_return_list,cov_matrix,mu_p):
 
 
 
-# ###################################################
-# np.random.seed(123)
-# n_assets = 4
-# n_obs = 1000
-# return_vec = np.random.randn(n_assets, n_obs)
-
 ###################################################
 config = ConfigObj('config.ini')
 
-symbol_list = sorted(config["data_path"].keys())
+symbol_list = sorted(config["general"]["traded_symbols"].split(','))
 print "Symbols: %s" % (','.join(symbol_list))
+
+riskiness_list = map(lambda s: float(config["riskiness"].get(s,1)), symbol_list)
+print "Riskiness: %s" % (','.join(map(str, riskiness_list)))
 
 ###################################################
 # read time series of prices
@@ -125,11 +151,30 @@ sym_data_list = map(lambda x: filter(lambda y: len(y) > 5, x), sym_data_list)
 sym_time_series_list = map(lambda data_list: map(lambda csv_fields: (datetime.strptime(csv_fields[0],"%Y-%m-%d"),float(csv_fields[5])), data_list), sym_data_list)
 
 px_return_list = map(lambda s: float(config["expect_returns"][s]), symbol_list)
-cov_matrix = calc_cov_matrix_annualized(sym_time_series_list)
 
-mu_p = config["expect_returns"]["target"]
+cov_matrix = calc_cov_matrix_annualized(symbol_list, sym_time_series_list, riskiness_list)
+
+if (config["general"]["include_cash"].lower() == "true"):
+    symbol_list.append("Cash")    
+    px_return_list.append(0.0)    
+
+    cov_matrix = np.column_stack([cov_matrix, np.zeros(cov_matrix.shape[0])])
+    newrow = np.transpose(np.asarray(map(lambda x: 0.0, range(len(symbol_list)))))
+    cov_matrix = np.vstack([cov_matrix, newrow])
+
+if (config["general"]["printCovMatrix"].lower() == "true"):
+    print
+    print "cov_matrix"
+    print cov_matrix
+
+mu_p = float(config["general"]["target_portfolio_return"])
 
 print
 print "solution"
-sol_list = map(lambda x: x, list(markowitz(px_return_list, cov_matrix, mu_p)["result"]['x']))
-print "\n".join(map(lambda x: str(x[0]) + ": " + str(round(x[1]*100,1)) + " %", sorted(zip(symbol_list,sol_list), reverse=True, key=lambda tup: tup[1])))
+sol_list = map(lambda x: x, list(markowitz(symbol_list, px_return_list, cov_matrix, mu_p)["result"]['x']))
+print "\n".join(map(lambda x: str(x[0]) + ": " + str(round(x[1]*100,1)) + " % (" + intWithCommas(int(x[1] * float(config["general"]["capital"]))) + ")", sorted(zip(symbol_list,sol_list), reverse=True, key=lambda tup: tup[1])))
+
+sol_vec = np.asarray(sol_list)
+sol_vec_T = np.matrix(sol_vec).T
+print
+print "portfolio stdev: %s" % (str(round(math.sqrt((sol_vec * cov_matrix) * sol_vec_T) * 100, 3)) + " %")
