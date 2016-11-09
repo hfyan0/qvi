@@ -172,7 +172,7 @@ mu_p = float(config["general"]["target_portfolio_return"])
 print
 print "solution"
 sol_list = map(lambda x: x, list(markowitz(symbol_list, px_return_list, cov_matrix, mu_p)["result"]['x']))
-print "\n".join(map(lambda x: str(x[0]) + ": " + str(round(x[1]*100,1)) + " % (" + intWithCommas(int(x[1] * float(config["general"]["capital"]))) + ")", sorted(zip(symbol_list,sol_list), reverse=True, key=lambda tup: tup[1])))
+print "\n".join(map(lambda x: justify_str(x[0],9,"right",' ') + ": " + justify_str(round(x[1]*100,1),7,"right",' ') + " % " + justify_str(intWithCommas(int(x[1] * float(config["general"]["capital"]))),10,"right",' '), sorted(zip(symbol_list,sol_list), reverse=True, key=lambda tup: tup[1])))
 
 sol_vec = np.asarray(sol_list)
 sol_vec_T = np.matrix(sol_vec).T
