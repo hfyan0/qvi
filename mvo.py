@@ -85,19 +85,19 @@ def calc_cov_matrix_annualized(symbol_list, sym_time_series_list, riskiness_list
     annualized_sd_list = map(lambda x: x[0]*math.sqrt(x[1]), zip(sd_list,annualization_factor_list))
     print
     print "annualized_sd_list"
-    print '\n'.join(map(lambda x: x[0]+' '+x[1], zip(symbol_list,map(lambda x: str(round(x,4)*100)+'%', annualized_sd_list))))
+    print '\n'.join(map(lambda x: justify_str(x[0],8,"right",' ')+justify_str(x[1],10,"right",' '), zip(symbol_list,map(lambda x: str(round(x,4)*100)+'%', annualized_sd_list))))
 
     annualized_sd_list = map(lambda x: x[0]*x[1], zip(annualized_sd_list,riskiness_list))
     print
     print "annualized_sd_list (after adjustment for riskiness)"
-    print '\n'.join(map(lambda x: x[0]+' '+x[1], zip(symbol_list,map(lambda x: str(round(x,4)*100)+'%', annualized_sd_list))))
+    print '\n'.join(map(lambda x: justify_str(x[0],8,"right",' ')+justify_str(x[1],10,"right",' '), zip(symbol_list,map(lambda x: str(round(x,4)*100)+'%', annualized_sd_list))))
     D = np.diag(annualized_sd_list)
     return (D * correl_matrix * D)
 
 def calc_mean_vec(sym_time_series_list):
     return map(lambda ts: sum(map(lambda x: x[1], ts))/len(ts), sym_time_series_list)
 
-def markowitz(symbol_list,px_return_list,cov_matrix,mu_p):
+def markowitz(symbol_list,expected_rtn_list,cov_matrix,mu_p):
     def iif(cond, iftrue=1.0, iffalse=0.0):
         if cond:
             return iftrue
@@ -118,14 +118,14 @@ def markowitz(symbol_list,px_return_list,cov_matrix,mu_p):
     h = cvxopt.matrix([ iif(j % 2) for j in range(2*n) ])
     # A and b determine the equality constraints defined as A x = b
     A = cvxopt.matrix([[ 1.0 for i in range(n) ],
-                px_return_list]).trans()
+                expected_rtn_list]).trans()
     b = cvxopt.matrix([ 1.0, float(mu_p) ])
 
     solvers.options['show_progress'] = False
     sol = solvers.qp(P, q, G, h, A, b)
 
-    # if sol['status'] != 'optimal':
-    #     raise Exception("Could not solve problem.")
+    if sol['status'] != 'optimal':
+        return None
 
     w = list(sol['x'])
     f = 2.0*sol['primal objective']
@@ -150,31 +150,72 @@ sym_data_list = map(lambda s: read_file(config["data_path"][s]), symbol_list)
 sym_data_list = map(lambda x: filter(lambda y: len(y) > 5, x), sym_data_list)
 sym_time_series_list = map(lambda data_list: map(lambda csv_fields: (datetime.strptime(csv_fields[0],"%Y-%m-%d"),float(csv_fields[5])), data_list), sym_data_list)
 
-px_return_list = map(lambda s: float(config["expect_returns"][s]), symbol_list)
+expected_rtn_list = map(lambda s: float(config["expect_returns"][s]), symbol_list)
 
 cov_matrix = calc_cov_matrix_annualized(symbol_list, sym_time_series_list, riskiness_list)
 
-if (config["general"]["include_cash"].lower() == "true"):
-    symbol_list.append("Cash")    
-    px_return_list.append(0.0)    
-
-    cov_matrix = np.column_stack([cov_matrix, np.zeros(cov_matrix.shape[0])])
-    newrow = np.transpose(np.asarray(map(lambda x: 0.0, range(len(symbol_list)))))
-    cov_matrix = np.vstack([cov_matrix, newrow])
+###################################################
+# inclusion of cash
+###################################################
+# symbol_list.append("Cash")    
+# expected_rtn_list.append(0.0)    
+# cov_matrix = np.column_stack([cov_matrix, np.zeros(cov_matrix.shape[0])])
+# newrow = np.transpose(np.asarray(map(lambda x: 0.0, range(len(symbol_list)))))
+# cov_matrix = np.vstack([cov_matrix, newrow])
 
 if (config["general"]["printCovMatrix"].lower() == "true"):
     print
     print "cov_matrix"
     print cov_matrix
 
-mu_p = float(config["general"]["target_portfolio_return"])
+sorted_expected_rtn_list = sorted(expected_rtn_list)
+
+from_tgt_rtn = sorted_expected_rtn_list[0]
+to_tgt_rtn = sorted_expected_rtn_list[-1]
+mu_sd_sharpe_soln_list = []
+N = 5000
+
+for i in range(N):
+
+    # mu_p = from_tgt_rtn + (to_tgt_rtn - from_tgt_rtn) * float(i)/float(N)
+    mu_p = to_tgt_rtn * float(i)/float(N)
+    sol_list = markowitz(symbol_list, expected_rtn_list, cov_matrix, mu_p)
+
+    if sol_list is None:
+        continue
+
+    sol_list = list(sol_list["result"]['x'])
+
+    sol_vec = np.asarray(sol_list)
+    sol_vec_T = np.matrix(sol_vec).T
+
+    port_exp_rtn = float(np.asarray(expected_rtn_list) * sol_vec_T)
+    port_stdev = math.sqrt(float((sol_vec * cov_matrix) * sol_vec_T))
+    sharpe_ratio = float(port_exp_rtn / port_stdev)
+
+    if (len(mu_sd_sharpe_soln_list) == 0) or (sharpe_ratio > mu_sd_sharpe_soln_list[2]):
+        mu_sd_sharpe_soln_list = []
+        mu_sd_sharpe_soln_list.append(float(port_exp_rtn))
+        mu_sd_sharpe_soln_list.append(float(port_stdev))
+        mu_sd_sharpe_soln_list.append(float(sharpe_ratio))
+        mu_sd_sharpe_soln_list.append(sol_list)
+
+port_exp_rtn, port_stdev, sharpe_ratio, sol_list = tuple(mu_sd_sharpe_soln_list)
+
+print
+print "market portfolio E[r] = %s stdev = %s Sharpe ratio = %s" % (str(round(port_exp_rtn*100, 3)) + " %", str(round(port_stdev*100,3)) + " %", round(sharpe_ratio,3))
+
+###################################################
+# Kelly's criterion
+###################################################
+kelly_f = sharpe_ratio
+print "Kelly f* = %s" % (kelly_f)
+
+
+###################################################
+sol_list = map(lambda x: x * kelly_f, sol_list)
+sym_sol_list = sorted(filter(lambda x: abs(x[1]) > 0.0001, zip(symbol_list,sol_list)), reverse=True, key=lambda tup: tup[1])
 
 print
 print "solution"
-sol_list = map(lambda x: x, list(markowitz(symbol_list, px_return_list, cov_matrix, mu_p)["result"]['x']))
-print "\n".join(map(lambda x: justify_str(x[0],9,"right",' ') + ": " + justify_str(round(x[1]*100,1),7,"right",' ') + " % " + justify_str(intWithCommas(int(x[1] * float(config["general"]["capital"]))),10,"right",' '), sorted(zip(symbol_list,sol_list), reverse=True, key=lambda tup: tup[1])))
-
-sol_vec = np.asarray(sol_list)
-sol_vec_T = np.matrix(sol_vec).T
-print
-print "portfolio stdev: %s" % (str(round(math.sqrt((sol_vec * cov_matrix) * sol_vec_T) * 100, 3)) + " %")
+print "\n".join(map(lambda x: justify_str(x[0],9,"right",' ') + ": " + justify_str(round(x[1]*100,1),7,"right",' ') + " %     $ " + justify_str(intWithCommas(int(x[1] * float(config["general"]["capital"]))),10,"right",' '), sym_sol_list))
