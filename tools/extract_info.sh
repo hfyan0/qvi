@@ -2,7 +2,7 @@
 source common.sh
 for SYMBOL in $SYMBOL_LIST
 do
-  OUTFILE="$SYMBOL.html"
+  OUTFILE="$ETF_INFO_FOLDER/$SYMBOL.html"
 
   echo $OUTFILE
   # cat $OUTFILE | grep -A 1 "Price / Earn"

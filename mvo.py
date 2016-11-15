@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 
 def read_file(file_loc):
     with open(file_loc,'r') as f:
-        return [line.split(',') for line in f]
+        return [map(lambda x: x.strip(), line.split(',')) for line in f]
 
 def justify_str(s,totlen,left_right,padchar):
     def extra(s,totlen):
@@ -140,7 +140,7 @@ config = ConfigObj('config.ini')
 symbol_list = sorted(config["general"]["traded_symbols"].split(','))
 print "Symbols: %s" % (','.join(symbol_list))
 
-riskiness_list = map(lambda s: float(config["riskiness"].get(s,1)), symbol_list)
+riskiness_list = map(lambda s: float(config["specific_riskiness"].get(s,1)), symbol_list)
 print "Riskiness: %s" % (','.join(map(str, riskiness_list)))
 
 ###################################################
@@ -150,7 +150,8 @@ sym_data_list = map(lambda s: read_file(config["data_path"][s]), symbol_list)
 sym_data_list = map(lambda x: filter(lambda y: len(y) > 5, x), sym_data_list)
 sym_time_series_list = map(lambda data_list: map(lambda csv_fields: (datetime.strptime(csv_fields[0],"%Y-%m-%d"),float(csv_fields[5])), data_list), sym_data_list)
 
-expected_rtn_list = map(lambda s: float(config["expect_returns"][s]), symbol_list)
+expected_rtn_dict = dict(map(lambda x: (x[0],float(x[1])), read_file(config["general"]["expected_return_file"])))
+expected_rtn_list = map(lambda x: expected_rtn_dict.get(x,0), symbol_list)
 
 cov_matrix = calc_cov_matrix_annualized(symbol_list, sym_time_series_list, riskiness_list)
 

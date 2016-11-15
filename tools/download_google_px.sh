@@ -1,8 +1,8 @@
 #!/bin/bash
 source common.sh
 
-CUR_PRICE_FILE="current_prices"
-TMPFILE="tmpfile"
+CUR_PRICE_FILE="../current_prices.csv"
+TMPFILE="$ETF_INFO_FOLDER/tmpfile"
 cat /dev/null > $CUR_PRICE_FILE
 
 for i in "HK" "US"
