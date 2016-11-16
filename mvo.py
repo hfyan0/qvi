@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-
 import sys
 import math
 import numpy as np
@@ -96,7 +95,7 @@ def calc_cov_matrix_annualized(sym_time_series_list, specific_riskiness_list):
 def calc_mean_vec(sym_time_series_list):
     return map(lambda ts: sum(map(lambda x: x[1], ts))/len(ts), sym_time_series_list)
 
-def markowitz(symbol_list,expected_rtn_list,cov_matrix,mu_p,max_weight):
+def markowitz(symbol_list,expected_rtn_list,cov_matrix,mu_p,max_weight_list):
     def iif(cond, iftrue=1.0, iffalse=0.0):
         if cond:
             return iftrue
@@ -114,7 +113,7 @@ def markowitz(symbol_list,expected_rtn_list,cov_matrix,mu_p,max_weight):
     G = cvxopt.matrix([[ (-1.0)**(1+j%2) * iif(i == j/2) for i in range(n) ]
                 for j in range(2*n)
                 ]).trans()
-    h = cvxopt.matrix([ max_weight * iif(j % 2) for j in range(2*n) ])
+    h = cvxopt.matrix([ max_weight_list[j/2] * iif(j % 2) for j in range(2*n) ])
     # A and b determine the equality constraints defined as A x = b
     A = cvxopt.matrix([[ 1.0 for i in range(n) ],
                 expected_rtn_list]).trans()
@@ -180,11 +179,14 @@ to_tgt_rtn = sorted_expected_rtn_list[-1]
 mu_sd_sharpe_soln_list = []
 N = 5000
 
+max_weight_dict = config["max_weight"]
+max_weight_list = map(lambda x: float(max_weight_dict[x]), symbol_list)
+
 for i in range(N):
 
     # mu_p = from_tgt_rtn + (to_tgt_rtn - from_tgt_rtn) * float(i)/float(N)
     mu_p = to_tgt_rtn * float(i)/float(N)
-    sol_list = markowitz(symbol_list, expected_rtn_list, cov_matrix, mu_p, float(config["general"]["max_weight"]))
+    sol_list = markowitz(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list)
 
     if sol_list is None:
         continue
@@ -219,19 +221,37 @@ print "Kelly f* = %s" % (kelly_f)
 print "Recommended portfolio: E[r] = %s stdev = %s" % (str(round(port_exp_rtn*kelly_f*100, 3)) + " %", str(round(port_stdev*kelly_f*100,3)) + " %")
 
 ###################################################
-sol_list = map(lambda x: x * kelly_f, sol_list)
-sym_sol_list = sorted(filter(lambda x: abs(x[1]) > 0.0001, zip(symbol_list,sol_list)), reverse=True, key=lambda tup: tup[1])
-
-
-###################################################
 # existing positions
 ###################################################
 existing_pos_list = read_file(config["general"]["existing_positions"])
 cur_px_dict = dict(map(lambda x: (x[0],float(x[1])), read_file(config["general"]["current_prices"])))
 existing_pos_dict = dict(map(lambda x: (x[0],conv_to_hkd(x[1],cur_px_dict[x[0]]*float(x[2]))), existing_pos_list))
-print existing_pos_dict
+# print existing_pos_dict
 ###################################################
 
+###################################################
+sol_list = map(lambda x: x * kelly_f, sol_list)
+sym_sol_list = filter(lambda x: abs(x[1]) > 0.0001, zip(symbol_list,sol_list))
+sym_sol_list.extend(map(lambda x: (x,0.0), filter(lambda k: k not in map(lambda y: y[0], sym_sol_list), existing_pos_dict.keys())))
+sym_sol_list = sorted(list(set(sym_sol_list)), reverse=True, key=lambda tup: tup[1])
+###################################################
+
+
+
+###################################################
+# solution
+###################################################
+header = "   Symbol:         %     Amount (HKD)  |     Existing  |         Diff"
+columns = []
+columns.append(map(lambda x: justify_str(x[0],9,"right",' '), sym_sol_list))
+columns.append(map(lambda x: ": ", sym_sol_list))
+columns.append(map(lambda x: justify_str(round(x[1]*100,1),7,"right",' '), sym_sol_list))
+columns.append(map(lambda x: " %     $ ", sym_sol_list))
+columns.append(map(lambda x: justify_str(intWithCommas(int(x[1] * float(config["general"]["capital"]))),10,"right",' '), sym_sol_list))
+columns.append(map(lambda x: "  | $ ", sym_sol_list))
+columns.append(map(lambda x: justify_str(intWithCommas(int(existing_pos_dict.get(x[0],0))),10,"right",' '), sym_sol_list))
+columns.append(map(lambda x: "  | $ ", sym_sol_list))
+columns.append(map(lambda x: justify_str(intWithCommas(int(x[1] * float(config["general"]["capital"]) - existing_pos_dict.get(x[0],0))),10,"right",' '), sym_sol_list))
 print
 print "Target portfolio:"
-print "\n".join(map(lambda x: justify_str(x[0],9,"right",' ') + ": " + justify_str(round(x[1]*100,1),7,"right",' ') + " %     $ " + justify_str(intWithCommas(int(x[1] * float(config["general"]["capital"]))),10,"right",' ') + "  | existing: $ " + justify_str(intWithCommas(int(existing_pos_dict.get(x[0],0))),10,"right",' '), sym_sol_list))
+print '\n'.join([header]+map(lambda x: ''.join(x), zip(columns[0],columns[1],columns[2],columns[3],columns[4],columns[5],columns[6],columns[7],columns[8])))

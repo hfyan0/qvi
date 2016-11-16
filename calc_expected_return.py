@@ -22,12 +22,12 @@ cur_px_dict = dict(map(lambda x: (x[0],float(x[1])), read_file(config["general"]
 eps_dict = dict([(k,float(v)) for k,v in config["eps"].items()])
 growth_rate_dict = dict([(k,float(v)) for k,v in config["growth_rate"].items()])
 divd_per_share_dict = dict([(k,float(v)) for k,v in config["annual_divd_per_share"].items()])
-divd_withholdg_tax_dict = dict([(k,float(v)) for k,v in config["divd_withholding_tax_rate"].items()])
+divd_withholdg_tax_rate_dict = dict([(k,float(v)) for k,v in config["divd_withholding_tax_rate"].items()])
 stamp_duty_rate_dict = dict([(k,float(v)) for k,v in config["stamp_duty_rate"].items()])
 fund_expense_ratio_dict = dict([(k,float(v)) for k,v in config["fund_expense_ratio"].items()])
 
 sym_with_divd_yield = divd_per_share_dict.keys()
-sym_divd_yield_dict = dict(map(lambda s: (s,divd_per_share_dict[s] * (1-divd_withholdg_tax_dict[s])/cur_px_dict[s]), sym_with_divd_yield))
+sym_divd_yield_dict = dict(map(lambda s: (s,divd_per_share_dict[s] * (1-divd_withholdg_tax_rate_dict[s])/cur_px_dict[s]), sym_with_divd_yield))
 
 print '\n'.join(["%s_divd_yield,%s" % (k,v) for k,v in sym_divd_yield_dict.items()])
 
