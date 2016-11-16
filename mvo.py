@@ -8,6 +8,11 @@ from cvxopt import blas, solvers
 from configobj import ConfigObj
 from datetime import datetime, timedelta
 
+def conv_to_hkd(currency,amt):
+    if currency == "USD":
+        return 7.8 * float(amt)
+    return float(amt)
+
 def read_file(file_loc):
     with open(file_loc,'r') as f:
         return [map(lambda x: x.strip(), line.split(',')) for line in f]
@@ -61,21 +66,22 @@ def get_annualization_factor(date_list):
     else:
         return 12
 
-def calc_cov_matrix_annualized(symbol_list, sym_time_series_list, riskiness_list):
+def calc_cov_matrix_annualized(sym_time_series_list, specific_riskiness_list):
     ###################################################
     # correlation matrix
     ###################################################
     correl_matrix = map(lambda ts_x: map(lambda ts_y: calc_correl(ts_x,ts_y), sym_time_series_list), sym_time_series_list)
     correl_matrix = np.asmatrix(correl_matrix)
 
-    print
-    print "correl_matrix"
-    np.set_printoptions(precision=3,suppress=True)
-    for row in correl_matrix.tolist():
-        for element in row:
-            str_element = str(round(element,3))
-            sys.stdout.write(justify_str(str_element,8,"right",' '))
-        sys.stdout.write('\n')
+    np.set_printoptions(precision=5,suppress=True)
+    if len(correl_matrix.tolist()) < 6:
+        print
+        print "correl_matrix"
+        for row in correl_matrix.tolist():
+            for element in row:
+                str_element = str(round(element,3))
+                sys.stdout.write(justify_str(str_element,8,"right",' '))
+            sys.stdout.write('\n')
 
     ###################################################
     # covariance matrix
@@ -83,21 +89,14 @@ def calc_cov_matrix_annualized(symbol_list, sym_time_series_list, riskiness_list
     sd_list = np.asarray(map(lambda ts: calc_sd(map(lambda x: x[1], ts)), sym_time_series_list))
     annualization_factor_list = (map(lambda ts: get_annualization_factor(map(lambda x: x[0], ts)), sym_time_series_list))
     annualized_sd_list = map(lambda x: x[0]*math.sqrt(x[1]), zip(sd_list,annualization_factor_list))
-    print
-    print "annualized_sd_list"
-    print '\n'.join(map(lambda x: justify_str(x[0],8,"right",' ')+justify_str(x[1],10,"right",' '), zip(symbol_list,map(lambda x: str(round(x,4)*100)+'%', annualized_sd_list))))
-
-    annualized_sd_list = map(lambda x: x[0]*x[1], zip(annualized_sd_list,riskiness_list))
-    print
-    print "annualized_sd_list (after adjustment for riskiness)"
-    print '\n'.join(map(lambda x: justify_str(x[0],8,"right",' ')+justify_str(x[1],10,"right",' '), zip(symbol_list,map(lambda x: str(round(x,4)*100)+'%', annualized_sd_list))))
-    D = np.diag(annualized_sd_list)
-    return (D * correl_matrix * D)
+    annualized_adj_sd_list = map(lambda x: x[0]+x[1], zip(annualized_sd_list,specific_riskiness_list))
+    D = np.diag(annualized_adj_sd_list)
+    return ((D * correl_matrix * D),annualized_sd_list,annualized_adj_sd_list)
 
 def calc_mean_vec(sym_time_series_list):
     return map(lambda ts: sum(map(lambda x: x[1], ts))/len(ts), sym_time_series_list)
 
-def markowitz(symbol_list,expected_rtn_list,cov_matrix,mu_p):
+def markowitz(symbol_list,expected_rtn_list,cov_matrix,mu_p,max_weight):
     def iif(cond, iftrue=1.0, iffalse=0.0):
         if cond:
             return iftrue
@@ -115,7 +114,7 @@ def markowitz(symbol_list,expected_rtn_list,cov_matrix,mu_p):
     G = cvxopt.matrix([[ (-1.0)**(1+j%2) * iif(i == j/2) for i in range(n) ]
                 for j in range(2*n)
                 ]).trans()
-    h = cvxopt.matrix([ iif(j % 2) for j in range(2*n) ])
+    h = cvxopt.matrix([ max_weight * iif(j % 2) for j in range(2*n) ])
     # A and b determine the equality constraints defined as A x = b
     A = cvxopt.matrix([[ 1.0 for i in range(n) ],
                 expected_rtn_list]).trans()
@@ -140,8 +139,8 @@ config = ConfigObj('config.ini')
 symbol_list = sorted(config["general"]["traded_symbols"].split(','))
 print "Symbols: %s" % (','.join(symbol_list))
 
-riskiness_list = map(lambda s: float(config["specific_riskiness"].get(s,1)), symbol_list)
-print "Riskiness: %s" % (','.join(map(str, riskiness_list)))
+specific_riskiness_list = map(lambda s: float(config["specific_riskiness"].get(s,0)), symbol_list)
+print "Riskiness: %s" % (','.join(map(str, specific_riskiness_list)))
 
 ###################################################
 # read time series of prices
@@ -153,7 +152,7 @@ sym_time_series_list = map(lambda data_list: map(lambda csv_fields: (datetime.st
 expected_rtn_dict = dict(map(lambda x: (x[0],float(x[1])), read_file(config["general"]["expected_return_file"])))
 expected_rtn_list = map(lambda x: expected_rtn_dict.get(x,0), symbol_list)
 
-cov_matrix = calc_cov_matrix_annualized(symbol_list, sym_time_series_list, riskiness_list)
+cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(sym_time_series_list, specific_riskiness_list)
 
 ###################################################
 # inclusion of cash
@@ -169,8 +168,13 @@ if (config["general"]["printCovMatrix"].lower() == "true"):
     print "cov_matrix"
     print cov_matrix
 
-sorted_expected_rtn_list = sorted(expected_rtn_list)
+str_expected_rtn_list = map(lambda x: str(round(x,4)*100)+'%', expected_rtn_list)
+str_annualized_sd_list = map(lambda x: str(round(x,4)*100)+'%', annualized_sd_list)
+str_annualized_adj_sd_list = map(lambda x: str(round(x,4)*100)+'%', annualized_adj_sd_list)
+str_sharpe_list = map(lambda x: str(round(x[0]/x[1],3)), zip(expected_rtn_list,annualized_adj_sd_list))
+print '\n'.join(map(lambda x: justify_str(x[0],8,"right",' ')+justify_str(x[1],10,"right",' ')+justify_str(x[2],10,"right",' ')+justify_str(x[3],10,"right",' ')+justify_str(x[4],10,"right",' '), zip(symbol_list,str_expected_rtn_list,str_annualized_sd_list,str_annualized_adj_sd_list,str_sharpe_list)))
 
+sorted_expected_rtn_list = sorted(expected_rtn_list)
 from_tgt_rtn = sorted_expected_rtn_list[0]
 to_tgt_rtn = sorted_expected_rtn_list[-1]
 mu_sd_sharpe_soln_list = []
@@ -180,7 +184,7 @@ for i in range(N):
 
     # mu_p = from_tgt_rtn + (to_tgt_rtn - from_tgt_rtn) * float(i)/float(N)
     mu_p = to_tgt_rtn * float(i)/float(N)
-    sol_list = markowitz(symbol_list, expected_rtn_list, cov_matrix, mu_p)
+    sol_list = markowitz(symbol_list, expected_rtn_list, cov_matrix, mu_p, float(config["general"]["max_weight"]))
 
     if sol_list is None:
         continue
@@ -204,7 +208,7 @@ for i in range(N):
 port_exp_rtn, port_stdev, sharpe_ratio, sol_list = tuple(mu_sd_sharpe_soln_list)
 
 print
-print "market portfolio E[r] = %s stdev = %s Sharpe ratio = %s" % (str(round(port_exp_rtn*100, 3)) + " %", str(round(port_stdev*100,3)) + " %", round(sharpe_ratio,3))
+print "Market portfolio: E[r] = %s stdev = %s Sharpe ratio = %s" % (str(round(port_exp_rtn*100, 3)) + " %", str(round(port_stdev*100,3)) + " %", round(sharpe_ratio,3))
 
 ###################################################
 # Kelly's criterion
@@ -212,11 +216,22 @@ print "market portfolio E[r] = %s stdev = %s Sharpe ratio = %s" % (str(round(por
 kelly_f = sharpe_ratio
 print "Kelly f* = %s" % (kelly_f)
 
+print "Recommended portfolio: E[r] = %s stdev = %s" % (str(round(port_exp_rtn*kelly_f*100, 3)) + " %", str(round(port_stdev*kelly_f*100,3)) + " %")
 
 ###################################################
 sol_list = map(lambda x: x * kelly_f, sol_list)
 sym_sol_list = sorted(filter(lambda x: abs(x[1]) > 0.0001, zip(symbol_list,sol_list)), reverse=True, key=lambda tup: tup[1])
 
+
+###################################################
+# existing positions
+###################################################
+existing_pos_list = read_file(config["general"]["existing_positions"])
+cur_px_dict = dict(map(lambda x: (x[0],float(x[1])), read_file(config["general"]["current_prices"])))
+existing_pos_dict = dict(map(lambda x: (x[0],conv_to_hkd(x[1],cur_px_dict[x[0]]*float(x[2]))), existing_pos_list))
+print existing_pos_dict
+###################################################
+
 print
-print "solution"
-print "\n".join(map(lambda x: justify_str(x[0],9,"right",' ') + ": " + justify_str(round(x[1]*100,1),7,"right",' ') + " %     $ " + justify_str(intWithCommas(int(x[1] * float(config["general"]["capital"]))),10,"right",' '), sym_sol_list))
+print "Target portfolio:"
+print "\n".join(map(lambda x: justify_str(x[0],9,"right",' ') + ": " + justify_str(round(x[1]*100,1),7,"right",' ') + " %     $ " + justify_str(intWithCommas(int(x[1] * float(config["general"]["capital"]))),10,"right",' ') + "  | existing: $ " + justify_str(intWithCommas(int(existing_pos_dict.get(x[0],0))),10,"right",' '), sym_sol_list))
