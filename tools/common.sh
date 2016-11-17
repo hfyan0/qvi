@@ -1,6 +1,6 @@
 #!/bin/bash
 DATA_PATH=/home/qy/Dropbox/dataENF/blmg/data_adj/
 ETF_INFO_FOLDER=etf_info/
-HK_SYMBOL_LIST="0003 0004 0011 0016 0062 0066 2388 0341 0388 0052 0941 0778 0808 0823 0836 2800 2819 2821"
-US_SYMBOL_LIST="AGG EFA EMB EWA EWG EWJ EZA IVV JNK MBB QQQ SPY TLT VNQ VOO VYM"
+HK_SYMBOL_LIST=$(cat ../config.ini | grep traded_symbols_hk | tr ',' ' ' | tr -d \" | awk -F= '{print $2}')
+US_SYMBOL_LIST=$(cat ../config.ini | grep traded_symbols_us | tr ',' ' ' | tr -d \" | awk -F= '{print $2}')
 SYMBOL_LIST="US_SYMBOL_LIST"

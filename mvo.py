@@ -135,7 +135,7 @@ def markowitz(symbol_list,expected_rtn_list,cov_matrix,mu_p,max_weight_list):
 ###################################################
 config = ConfigObj('config.ini')
 
-symbol_list = sorted(config["general"]["traded_symbols"].split(','))
+symbol_list = sorted([i for k in map(lambda x: config["general"][x].split(','), filter(lambda x: "traded_symbols" in x, config["general"].keys())) for i in k])
 print "Symbols: %s" % (','.join(symbol_list))
 
 specific_riskiness_list = map(lambda s: float(config["specific_riskiness"].get(s,0)), symbol_list)
@@ -218,40 +218,51 @@ print "Market portfolio: E[r] = %s stdev = %s Sharpe ratio = %s" % (str(round(po
 kelly_f = sharpe_ratio
 print "Kelly f* = %s" % (kelly_f)
 
-print "Recommended portfolio: E[r] = %s stdev = %s" % (str(round(port_exp_rtn*kelly_f*100, 3)) + " %", str(round(port_stdev*kelly_f*100,3)) + " %")
+print "Target portfolio: E[r] = %s stdev = %s" % (str(round(port_exp_rtn*kelly_f*100, 3)) + " %", str(round(port_stdev*kelly_f*100,3)) + " %")
 
 ###################################################
 # existing positions
 ###################################################
 existing_pos_list = read_file(config["general"]["existing_positions"])
 cur_px_dict = dict(map(lambda x: (x[0],float(x[1])), read_file(config["general"]["current_prices"])))
-existing_pos_dict = dict(map(lambda x: (x[0],conv_to_hkd(x[1],cur_px_dict[x[0]]*float(x[2]))), existing_pos_list))
-# print existing_pos_dict
+existing_mkt_val_dict = dict(map(lambda x: (x[0],conv_to_hkd(x[1],cur_px_dict[x[0]]*float(x[2]))), existing_pos_list))
+# print existing_mkt_val_dict
 ###################################################
 
 ###################################################
 sol_list = map(lambda x: x * kelly_f, sol_list)
 sym_sol_list = filter(lambda x: abs(x[1]) > 0.0001, zip(symbol_list,sol_list))
-sym_sol_list.extend(map(lambda x: (x,0.0), filter(lambda k: k not in map(lambda y: y[0], sym_sol_list), existing_pos_dict.keys())))
+sym_sol_list.extend(map(lambda x: (x,0.0), filter(lambda k: k not in map(lambda y: y[0], sym_sol_list), existing_mkt_val_dict.keys())))
 sym_sol_list = sorted(list(set(sym_sol_list)), reverse=True, key=lambda tup: tup[1])
 ###################################################
 
+
+###################################################
+# stat about existing portfolio
+###################################################
+existing_port_exp_rtn_list = map(lambda s: (s,int(expected_rtn_dict[s] * existing_mkt_val_dict[s])), existing_mkt_val_dict.keys())
+print "Existing portfolio:"
+print "Market value: HKD %s" % (intWithCommas(int(sum(existing_mkt_val_dict.values()))))
+print "Expected return for 1 year: HKD %s" % (intWithCommas(int(sum(map(lambda x: x[1], existing_port_exp_rtn_list)))))
+print '\n'.join(map(lambda x: justify_str(x[0],7,"right",' ') + ":  HKD " + justify_str(intWithCommas(x[1]),8,"right",' '), existing_port_exp_rtn_list))
 
 
 ###################################################
 # solution
 ###################################################
-header = "   Symbol:         %     Amount (HKD)  |     Existing  |         Diff"
+header = "   Symbol:                      %     Amount (HKD)  |     Existing  |         Diff"
 columns = []
 columns.append(map(lambda x: justify_str(x[0],9,"right",' '), sym_sol_list))
 columns.append(map(lambda x: ": ", sym_sol_list))
+columns.append(map(lambda x: justify_str(cur_px_dict.get(x[0],"---"),10,"right",' '), sym_sol_list))
+columns.append(map(lambda x: "   ", sym_sol_list))
 columns.append(map(lambda x: justify_str(round(x[1]*100,1),7,"right",' '), sym_sol_list))
 columns.append(map(lambda x: " %     $ ", sym_sol_list))
 columns.append(map(lambda x: justify_str(intWithCommas(int(x[1] * float(config["general"]["capital"]))),10,"right",' '), sym_sol_list))
 columns.append(map(lambda x: "  | $ ", sym_sol_list))
-columns.append(map(lambda x: justify_str(intWithCommas(int(existing_pos_dict.get(x[0],0))),10,"right",' '), sym_sol_list))
+columns.append(map(lambda x: justify_str(intWithCommas(int(existing_mkt_val_dict.get(x[0],0))),10,"right",' '), sym_sol_list))
 columns.append(map(lambda x: "  | $ ", sym_sol_list))
-columns.append(map(lambda x: justify_str(intWithCommas(int(x[1] * float(config["general"]["capital"]) - existing_pos_dict.get(x[0],0))),10,"right",' '), sym_sol_list))
+columns.append(map(lambda x: justify_str(intWithCommas(int(x[1] * float(config["general"]["capital"]) - existing_mkt_val_dict.get(x[0],0))),10,"right",' '), sym_sol_list))
 print
 print "Target portfolio:"
-print '\n'.join([header]+map(lambda x: ''.join(x), zip(columns[0],columns[1],columns[2],columns[3],columns[4],columns[5],columns[6],columns[7],columns[8])))
+print '\n'.join([header]+map(lambda x: ''.join(x), zip(columns[0],columns[1],columns[2],columns[3],columns[4],columns[5],columns[6],columns[7],columns[8],columns[9],columns[10])))
