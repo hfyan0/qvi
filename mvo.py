@@ -177,15 +177,15 @@ sorted_expected_rtn_list = sorted(expected_rtn_list)
 from_tgt_rtn = sorted_expected_rtn_list[0]
 to_tgt_rtn = sorted_expected_rtn_list[-1]
 mu_sd_sharpe_soln_list = []
-N = 5000
+N = 1000
 
 max_weight_dict = config["max_weight"]
 max_weight_list = map(lambda x: float(max_weight_dict[x]), symbol_list)
 
 for i in range(N):
 
-    # mu_p = from_tgt_rtn + (to_tgt_rtn - from_tgt_rtn) * float(i)/float(N)
-    mu_p = to_tgt_rtn * float(i)/float(N)
+    mu_p = from_tgt_rtn + (to_tgt_rtn - from_tgt_rtn) * float(i)/float(N)
+    # mu_p = to_tgt_rtn * float(i)/float(N)
     sol_list = markowitz(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list)
 
     if sol_list is None:
