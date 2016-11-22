@@ -196,61 +196,72 @@ for i in range(N):
     sol_vec = np.asarray(sol_list)
     sol_vec_T = np.matrix(sol_vec).T
 
-    port_exp_rtn = float(np.asarray(expected_rtn_list) * sol_vec_T)
-    port_stdev = math.sqrt(float((sol_vec * cov_matrix) * sol_vec_T))
-    sharpe_ratio = float(port_exp_rtn / port_stdev)
+    target_port_exp_rtn = float(np.asarray(expected_rtn_list) * sol_vec_T)
+    target_port_stdev = math.sqrt(float((sol_vec * cov_matrix) * sol_vec_T))
+    target_port_sharpe_ratio = float(target_port_exp_rtn / target_port_stdev)
 
-    if (len(mu_sd_sharpe_soln_list) == 0) or (sharpe_ratio > mu_sd_sharpe_soln_list[2]):
+    if (len(mu_sd_sharpe_soln_list) == 0) or (target_port_sharpe_ratio > mu_sd_sharpe_soln_list[2]):
         mu_sd_sharpe_soln_list = []
-        mu_sd_sharpe_soln_list.append(float(port_exp_rtn))
-        mu_sd_sharpe_soln_list.append(float(port_stdev))
-        mu_sd_sharpe_soln_list.append(float(sharpe_ratio))
+        mu_sd_sharpe_soln_list.append(float(target_port_exp_rtn))
+        mu_sd_sharpe_soln_list.append(float(target_port_stdev))
+        mu_sd_sharpe_soln_list.append(float(target_port_sharpe_ratio))
         mu_sd_sharpe_soln_list.append(sol_list)
 
-port_exp_rtn, port_stdev, sharpe_ratio, sol_list = tuple(mu_sd_sharpe_soln_list)
+target_port_exp_rtn, target_port_stdev, target_port_sharpe_ratio, sol_list = tuple(mu_sd_sharpe_soln_list)
 
 print
-print "Market portfolio: E[r] = %s stdev = %s Sharpe ratio = %s" % (str(round(port_exp_rtn*100, 3)) + " %", str(round(port_stdev*100,3)) + " %", round(sharpe_ratio,3))
 
 ###################################################
 # Kelly's criterion
 ###################################################
-kelly_f = sharpe_ratio
+kelly_f = target_port_sharpe_ratio
 print "Kelly f* = %s" % (kelly_f)
 
-print "Target portfolio: E[r] = %s stdev = %s" % (str(round(port_exp_rtn*kelly_f*100, 3)) + " %", str(round(port_stdev*kelly_f*100,3)) + " %")
+print
+print "Market portfolio:  E[r] = %s stdev = %s Sharpe ratio = %s" % (str(round(target_port_exp_rtn*100, 3)) + " %", str(round(target_port_stdev*100,3)) + " %", round(target_port_sharpe_ratio,3))
+print "Target portfolio:  E[r] = %s stdev = %s" % (str(round(target_port_exp_rtn*kelly_f*100, 3)) + " %", str(round(target_port_stdev*kelly_f*100,3)) + " %")
 
 ###################################################
-# existing positions
+# current positions
 ###################################################
-existing_pos_list = read_file(config["general"]["existing_positions"])
+current_pos_list = read_file(config["general"]["current_positions"])
 cur_px_dict = dict(map(lambda x: (x[0],float(x[1])), read_file(config["general"]["current_prices"])))
-existing_mkt_val_dict = dict(map(lambda x: (x[0],conv_to_hkd(x[1],cur_px_dict[x[0]]*float(x[2]))), existing_pos_list))
-# print existing_mkt_val_dict
+current_mkt_val_dict = {}
+if len(current_pos_list) > 0:
+    current_mkt_val_dict = dict(map(lambda x: (x[0],conv_to_hkd(x[1],cur_px_dict[x[0]]*float(x[2]))), current_pos_list))
+    current_weight_dict = dict(map(lambda s: (s,current_mkt_val_dict[s]/float(config["general"]["capital"])), current_mkt_val_dict.keys()))
+    current_weight_list = map(lambda s: current_weight_dict.get(s,0.0), symbol_list)
+
+    cur_pos_vec = np.asarray(current_weight_list)
+    cur_pos_vec_T = np.matrix(cur_pos_vec).T
+    cur_port_exp_rtn = float(np.asarray(expected_rtn_list) * cur_pos_vec_T)
+    cur_port_stdev = math.sqrt(float((cur_pos_vec * cov_matrix) * cur_pos_vec_T))
+    cur_port_sharpe_ratio = float(cur_port_exp_rtn / cur_port_stdev)
 ###################################################
 
 ###################################################
 sol_list = map(lambda x: x * kelly_f, sol_list)
 sym_sol_list = filter(lambda x: abs(x[1]) > 0.0001, zip(symbol_list,sol_list))
-sym_sol_list.extend(map(lambda x: (x,0.0), filter(lambda k: k not in map(lambda y: y[0], sym_sol_list), existing_mkt_val_dict.keys())))
+sym_sol_list.extend(map(lambda x: (x,0.0), filter(lambda k: k not in map(lambda y: y[0], sym_sol_list), current_mkt_val_dict.keys())))
 sym_sol_list = sorted(list(set(sym_sol_list)), reverse=True, key=lambda tup: tup[1])
 ###################################################
 
 
 ###################################################
-# stat about existing portfolio
+# stat about current portfolio
 ###################################################
-existing_port_exp_rtn_list = map(lambda s: (s,int(expected_rtn_dict[s] * existing_mkt_val_dict[s])), existing_mkt_val_dict.keys())
-print "Existing portfolio:"
-print "Market value: HKD %s" % (intWithCommas(int(sum(existing_mkt_val_dict.values()))))
-print "Expected return for 1 year: HKD %s" % (intWithCommas(int(sum(map(lambda x: x[1], existing_port_exp_rtn_list)))))
-print '\n'.join(map(lambda x: justify_str(x[0],7,"right",' ') + ":  HKD " + justify_str(intWithCommas(x[1]),8,"right",' '), existing_port_exp_rtn_list))
+if len(current_pos_list) > 0:
+    current_port_exp_rtn_list = map(lambda s: (s,int(expected_rtn_dict[s] * current_mkt_val_dict[s])), current_mkt_val_dict.keys())
+    print "Current portfolio: E[r] = %s stdev = %s Sharpe ratio = %s" % (str(round(cur_port_exp_rtn*100, 3)) + " %", str(round(cur_port_stdev*100,3)) + " %", round(cur_port_sharpe_ratio,3))
+    print "Current portfolio: Market value: HKD %s" % (intWithCommas(int(sum(current_mkt_val_dict.values()))))
+    print "Current portfolio: Expected return for 1 year: HKD %s" % (intWithCommas(int(sum(map(lambda x: x[1], current_port_exp_rtn_list)))))
+    print '\n'.join(map(lambda x: justify_str(x[0],7,"right",' ') + ":  HKD " + justify_str(intWithCommas(x[1]),8,"right",' '), current_port_exp_rtn_list))
 
 
 ###################################################
 # solution
 ###################################################
-header = "   Symbol:                      %     Amount (HKD)  |     Existing  |         Diff"
+header = "   Symbol:                      %     Amount (HKD)  |      Current  |         Diff"
 columns = []
 columns.append(map(lambda x: justify_str(x[0],9,"right",' '), sym_sol_list))
 columns.append(map(lambda x: ": ", sym_sol_list))
@@ -260,9 +271,9 @@ columns.append(map(lambda x: justify_str(round(x[1]*100,1),7,"right",' '), sym_s
 columns.append(map(lambda x: " %     $ ", sym_sol_list))
 columns.append(map(lambda x: justify_str(intWithCommas(int(x[1] * float(config["general"]["capital"]))),10,"right",' '), sym_sol_list))
 columns.append(map(lambda x: "  | $ ", sym_sol_list))
-columns.append(map(lambda x: justify_str(intWithCommas(int(existing_mkt_val_dict.get(x[0],0))),10,"right",' '), sym_sol_list))
+columns.append(map(lambda x: justify_str(intWithCommas(int(current_mkt_val_dict.get(x[0],0))),10,"right",' '), sym_sol_list))
 columns.append(map(lambda x: "  | $ ", sym_sol_list))
-columns.append(map(lambda x: justify_str(intWithCommas(int(x[1] * float(config["general"]["capital"]) - existing_mkt_val_dict.get(x[0],0))),10,"right",' '), sym_sol_list))
+columns.append(map(lambda x: justify_str(intWithCommas(int(x[1] * float(config["general"]["capital"]) - current_mkt_val_dict.get(x[0],0))),10,"right",' '), sym_sol_list))
 print
 print "Target portfolio:"
 print '\n'.join([header]+map(lambda x: ''.join(x), zip(columns[0],columns[1],columns[2],columns[3],columns[4],columns[5],columns[6],columns[7],columns[8],columns[9],columns[10])))

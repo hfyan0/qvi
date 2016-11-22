@@ -7,7 +7,6 @@ then
     cd ..
 fi
 
-./calc_expected_return.py > expected_returns.csv
-# cat expected_returns.csv
+python calc_expected_return.py
 
 python mvo.py | grep -v Terminated 2>&1

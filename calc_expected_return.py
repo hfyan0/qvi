@@ -9,6 +9,17 @@ def read_file(file_loc):
     with open(file_loc,'r') as f:
         return [map(lambda x: x.strip(), line.split(',')) for line in f]
 
+def justify_str(s,totlen,left_right,padchar):
+    def extra(s,totlen):
+        return ''.join(map(lambda x: padchar, range(totlen - len(s))))
+    s = str(s)
+    if left_right == "left":
+        return s + extra(s,totlen)
+    elif left_right == "right":
+        return extra(s,totlen) + s
+    else:
+        return s
+
 def calc_req_rate_of_return(g,pe):
     g=float(g)
     pe=float(pe)
@@ -30,12 +41,16 @@ traded_symbol_list = sorted([i for k in map(lambda x: config["general"][x].split
 sym_with_divd_yield = filter(lambda x: x in traded_symbol_list, divd_per_share_dict.keys())
 sym_divd_yield_dict = dict(map(lambda s: (s,divd_per_share_dict[s] * (1-divd_withholdg_tax_rate_dict[s])/cur_px_dict[s]), sym_with_divd_yield))
 
-print '\n'.join(["%s_divd_yield,%s" % (k,v) for k,v in sym_divd_yield_dict.items()])
-
 sym_with_req_rate_rtn = filter(lambda x: x in traded_symbol_list, eps_dict.keys())
 sym_req_rate_rtn_dict = dict(map(lambda s: (s,est_expected_rtn(calc_req_rate_of_return(growth_rate_dict.get(s,0),cur_px_dict[s]/eps_dict[s]),sym_divd_yield_dict[s],stamp_duty_rate_dict[s],fund_expense_ratio_dict[s])), sym_with_req_rate_rtn))
 
 symbol_list = list(set(sym_req_rate_rtn_dict.keys() + sym_divd_yield_dict.keys()))
+
+sys.stdout.write("    symbol")
+sys.stdout.write("      divd")
+sys.stdout.write("  req rate")
+sys.stdout.write("\n")
+print '\n'.join(map(lambda s: justify_str(s,10,"right",' ')+justify_str(round(sym_divd_yield_dict.get(s,0)*100,2),10,"right",' ')+justify_str(round(sym_req_rate_rtn_dict.get(s,0)*100,2),10,"right",' '), sorted(symbol_list)))
 
 sym_exp_rtn_list = []
 for s in symbol_list:
@@ -44,4 +59,6 @@ for s in symbol_list:
     elif s in sym_divd_yield_dict:
         sym_exp_rtn_list.append((s,sym_divd_yield_dict[s]))
 
-print '\n'.join(map(lambda x: x[0]+','+str(x[1]), sorted(sym_exp_rtn_list,key=lambda tup: tup[1],reverse=True)))
+outfile = open(config["general"]["expected_return_file"], "w")
+outfile.write('\n'.join(map(lambda x: x[0]+','+str(x[1]), sorted(sym_exp_rtn_list,key=lambda tup: tup[1],reverse=True))))
+outfile.close()
