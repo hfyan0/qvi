@@ -63,15 +63,16 @@ historical_curasset_src_dict = get_data_as_dict(config["general"]["historical_cu
 symbol_list = sorted(list(set(historical_earnings_src_dict.keys()).intersection(set(historical_noncurasset_src_dict.keys()))))
 
 sym_roa_list = map(lambda tup_list: map(lambda tup: correct_scale(tup[0]/(tup[1]+tup[2])), tup_list), map(lambda s: zip(historical_earnings_src_dict[s][0:-1],avg_asset(historical_noncurasset_src_dict[s]),avg_asset(historical_curasset_src_dict[s])), symbol_list))
-print "ROA"
-print '\n'.join(map(lambda x: justify_str(x[0],8)+": "+','.join(map(lambda a: justify_str(a,6), map(lambda y: round(y*100,2), x[1])))+" (%)", zip(symbol_list,sym_roa_list)))
+print "ROA (historical)"
+print '\n'.join(map(lambda x: justify_str(x[0],12)+": "+','.join(map(lambda a: justify_str(a,6), map(lambda y: round(y*100,2), x[1])))+" (%)", zip(symbol_list,sym_roa_list)))
 
-sym_roa_list = zip(symbol_list,map(lambda x: sorted([x[0],subtract_1sd_from_mean(x),min(x)]), sym_roa_list))
+sym_roa_list = zip(symbol_list,map(lambda x: [x[0],subtract_1sd_from_mean(x),min(x),sum(x)/len(x)], sym_roa_list))
 sym_roa_dict = dict(sym_roa_list)
 
-print "ROA"
-print '\n'.join(map(lambda tup: justify_str(tup[0],8)+": "+','.join(map(lambda y: justify_str(y,6), map(lambda x: str(round(x*100,2)), tup[1])))+" (%)", sym_roa_list))
+print "Estimates (latest,-1sd,min,avg)"
+print "ROA (est)"
+print '\n'.join(map(lambda tup: justify_str(tup[0],12)+": "+','.join(map(lambda y: justify_str(y,6), map(lambda x: str(round(x*100,2)), tup[1])))+" (%)", sym_roa_list))
 
 sym_est_eps_list = map(lambda s: (s,get_eps_from_roa(s,sym_roa_dict,historical_noncurasset_src_dict,historical_curasset_src_dict,float(historical_earnings_src_dict[s][0])/float(historical_eps_src_dict[s][0]))), symbol_list)
-print "EPS"
-print '\n'.join(map(lambda tup: justify_str(tup[0],8)+": "+','.join(map(lambda y: justify_str(y,6), map(lambda x: str(round(x,2)), tup[1]))), sym_est_eps_list))
+print "EPS (est)"
+print '\n'.join(map(lambda tup: justify_str(tup[0],12)+": "+','.join(map(lambda y: justify_str(y,6), map(lambda x: str(round(x,2)), tup[1]))), sym_est_eps_list))

@@ -4,6 +4,7 @@ if [[ $1 == 'p' ]]
 then
     cd tools
     ./download_google_px.sh
+    ./add_current_px_manually.sh
     cd ..
 fi
 

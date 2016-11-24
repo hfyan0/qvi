@@ -16,7 +16,7 @@ def read_file(file_loc):
     with open(file_loc,'r') as f:
         return [map(lambda x: x.strip(), line.split(',')) for line in f]
 
-def justify_str(s,totlen,left_right,padchar):
+def justify_str(s,totlen,left_right="right",padchar=' '):
     def extra(s,totlen):
         return ''.join(map(lambda x: padchar, range(totlen - len(s))))
     s = str(s)
@@ -79,7 +79,7 @@ def calc_cov_matrix_annualized(sym_time_series_list, specific_riskiness_list):
         for row in correl_matrix.tolist():
             for element in row:
                 str_element = str(round(element,3))
-                sys.stdout.write(justify_str(str_element,8,"right",' '))
+                sys.stdout.write(justify_str(str_element,8))
             sys.stdout.write('\n')
 
     ###################################################
@@ -171,7 +171,8 @@ str_expected_rtn_list = map(lambda x: str(round(x,4)*100)+'%', expected_rtn_list
 str_annualized_sd_list = map(lambda x: str(round(x,4)*100)+'%', annualized_sd_list)
 str_annualized_adj_sd_list = map(lambda x: str(round(x,4)*100)+'%', annualized_adj_sd_list)
 str_sharpe_list = map(lambda x: str(round(x[0]/x[1],3)), zip(expected_rtn_list,annualized_adj_sd_list))
-print '\n'.join(map(lambda x: justify_str(x[0],8,"right",' ')+justify_str(x[1],10,"right",' ')+justify_str(x[2],10,"right",' ')+justify_str(x[3],10,"right",' ')+justify_str(x[4],10,"right",' '), zip(symbol_list,str_expected_rtn_list,str_annualized_sd_list,str_annualized_adj_sd_list,str_sharpe_list)))
+print "symbol,E[r],SD[r],SD_adj[r],Sharpe"
+print '\n'.join(map(lambda x: justify_str(x[0],8)+justify_str(x[1],10)+justify_str(x[2],10)+justify_str(x[3],10)+justify_str(x[4],10), zip(symbol_list,str_expected_rtn_list,str_annualized_sd_list,str_annualized_adj_sd_list,str_sharpe_list)))
 
 sorted_expected_rtn_list = sorted(expected_rtn_list)
 from_tgt_rtn = sorted_expected_rtn_list[0]
@@ -214,8 +215,10 @@ print
 ###################################################
 # Kelly's criterion
 ###################################################
-kelly_f = target_port_sharpe_ratio
+kelly_f = float(target_port_exp_rtn / target_port_stdev / target_port_stdev)
 print "Kelly f* = %s" % (kelly_f)
+kelly_f = min(kelly_f,1.0)
+print "Kelly f* (unleveraged) = %s" % (kelly_f)
 
 print
 print "Market portfolio:  E[r] = %s stdev = %s Sharpe ratio = %s" % (str(round(target_port_exp_rtn*100, 3)) + " %", str(round(target_port_stdev*100,3)) + " %", round(target_port_sharpe_ratio,3))
@@ -246,34 +249,35 @@ sym_sol_list.extend(map(lambda x: (x,0.0), filter(lambda k: k not in map(lambda 
 sym_sol_list = sorted(list(set(sym_sol_list)), reverse=True, key=lambda tup: tup[1])
 ###################################################
 
-
 ###################################################
 # stat about current portfolio
 ###################################################
 if len(current_pos_list) > 0:
     current_port_exp_rtn_list = map(lambda s: (s,int(expected_rtn_dict[s] * current_mkt_val_dict[s])), current_mkt_val_dict.keys())
     print "Current portfolio: E[r] = %s stdev = %s Sharpe ratio = %s" % (str(round(cur_port_exp_rtn*100, 3)) + " %", str(round(cur_port_stdev*100,3)) + " %", round(cur_port_sharpe_ratio,3))
-    print "Current portfolio: Market value: HKD %s" % (intWithCommas(int(sum(current_mkt_val_dict.values()))))
-    print "Current portfolio: Expected return for 1 year: HKD %s" % (intWithCommas(int(sum(map(lambda x: x[1], current_port_exp_rtn_list)))))
-    print '\n'.join(map(lambda x: justify_str(x[0],7,"right",' ') + ":  HKD " + justify_str(intWithCommas(x[1]),8,"right",' '), current_port_exp_rtn_list))
 
+print "Target portfolio:  Market value: HKD %s" % (justify_str(intWithCommas(int(float(config["general"]["capital"])*target_port_sharpe_ratio)),11))
+if len(current_pos_list) > 0:
+    print "Current portfolio: Market value: HKD %s" % (justify_str(intWithCommas(int(sum(current_mkt_val_dict.values()))),11))
+    print "Current portfolio: Expected return for 1 year: HKD %s" % (intWithCommas(int(sum(map(lambda x: x[1], current_port_exp_rtn_list)))))
+    print '\n'.join(map(lambda x: justify_str(x[0],7) + ":  HKD " + justify_str(intWithCommas(x[1]),8), sorted(current_port_exp_rtn_list, key=lambda tup: tup[1], reverse=True)))
 
 ###################################################
 # solution
 ###################################################
 header = "   Symbol:                      %     Amount (HKD)  |      Current  |         Diff"
 columns = []
-columns.append(map(lambda x: justify_str(x[0],9,"right",' '), sym_sol_list))
+columns.append(map(lambda x: justify_str(x[0],9), sym_sol_list))
 columns.append(map(lambda x: ": ", sym_sol_list))
-columns.append(map(lambda x: justify_str(cur_px_dict.get(x[0],"---"),10,"right",' '), sym_sol_list))
+columns.append(map(lambda x: justify_str(cur_px_dict.get(x[0],"---"),10), sym_sol_list))
 columns.append(map(lambda x: "   ", sym_sol_list))
-columns.append(map(lambda x: justify_str(round(x[1]*100,1),7,"right",' '), sym_sol_list))
+columns.append(map(lambda x: justify_str(round(x[1]*100,1),7), sym_sol_list))
 columns.append(map(lambda x: " %     $ ", sym_sol_list))
-columns.append(map(lambda x: justify_str(intWithCommas(int(x[1] * float(config["general"]["capital"]))),10,"right",' '), sym_sol_list))
+columns.append(map(lambda x: justify_str(intWithCommas(int(x[1] * float(config["general"]["capital"]))),10), sym_sol_list))
 columns.append(map(lambda x: "  | $ ", sym_sol_list))
-columns.append(map(lambda x: justify_str(intWithCommas(int(current_mkt_val_dict.get(x[0],0))),10,"right",' '), sym_sol_list))
+columns.append(map(lambda x: justify_str(intWithCommas(int(current_mkt_val_dict.get(x[0],0))),10), sym_sol_list))
 columns.append(map(lambda x: "  | $ ", sym_sol_list))
-columns.append(map(lambda x: justify_str(intWithCommas(int(x[1] * float(config["general"]["capital"]) - current_mkt_val_dict.get(x[0],0))),10,"right",' '), sym_sol_list))
+columns.append(map(lambda x: justify_str(intWithCommas(int(x[1] * float(config["general"]["capital"]) - current_mkt_val_dict.get(x[0],0))),10), sym_sol_list))
 print
 print "Target portfolio:"
 print '\n'.join([header]+map(lambda x: ''.join(x), zip(columns[0],columns[1],columns[2],columns[3],columns[4],columns[5],columns[6],columns[7],columns[8],columns[9],columns[10])))
