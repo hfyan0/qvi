@@ -38,7 +38,7 @@ fund_expense_ratio_dict = dict([(k,float(v)) for k,v in config["fund_expense_rat
 
 traded_symbol_list = sorted([i for k in map(lambda x: config["general"][x].split(','), filter(lambda x: "traded_symbols" in x, config["general"].keys())) for i in k])
 sym_with_divd_yield = filter(lambda x: x in traded_symbol_list, divd_per_share_dict.keys())
-sym_divd_yield_dict = dict(map(lambda s: (s,divd_per_share_dict[s] * (1-divd_withholdg_tax_rate_dict.get(s,0.0))/cur_px_dict[s]), sym_with_divd_yield))
+sym_divd_yield_dict = dict(map(lambda s: (s,((divd_per_share_dict[s] * (1-divd_withholdg_tax_rate_dict.get(s,0.0))/cur_px_dict[s]) if divd_per_share_dict[s] > 0.0 else -fund_expense_ratio_dict.get(s,0.0))), sym_with_divd_yield))
 
 sym_with_req_rate_rtn = filter(lambda x: x in traded_symbol_list, eps_dict.keys())
 sym_req_rate_rtn_dict = dict(map(lambda s: (s,est_expected_rtn(calc_req_rate_of_return(growth_rate_dict.get(s,0),cur_px_dict[s]/eps_dict[s]),sym_divd_yield_dict[s],stamp_duty_rate_dict.get(s,0.0),fund_expense_ratio_dict.get(s,0.0))), sym_with_req_rate_rtn))

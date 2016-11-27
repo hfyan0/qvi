@@ -171,7 +171,8 @@ str_expected_rtn_list = map(lambda x: str(round(x,4)*100)+'%', expected_rtn_list
 str_annualized_sd_list = map(lambda x: str(round(x,4)*100)+'%', annualized_sd_list)
 str_annualized_adj_sd_list = map(lambda x: str(round(x,4)*100)+'%', annualized_adj_sd_list)
 str_sharpe_list = map(lambda x: str(round(x[0]/x[1],3)), zip(expected_rtn_list,annualized_adj_sd_list))
-print "symbol,E[r],SD[r],SD_adj[r],Sharpe"
+print
+print "%s%s%s%s%s" % (justify_str("Symbol",8),justify_str("E[r]",10),justify_str("SD[r]",10),justify_str("SD_adj[r]",10),justify_str("Sharpe",10))
 print '\n'.join(map(lambda x: justify_str(x[0],8)+justify_str(x[1],10)+justify_str(x[2],10)+justify_str(x[3],10)+justify_str(x[4],10), zip(symbol_list,str_expected_rtn_list,str_annualized_sd_list,str_annualized_adj_sd_list,str_sharpe_list)))
 
 sorted_expected_rtn_list = sorted(expected_rtn_list)
@@ -181,7 +182,11 @@ mu_sd_sharpe_soln_list = []
 N = 1000
 
 max_weight_dict = config["max_weight"]
-max_weight_list = map(lambda x: float(max_weight_dict[x]), symbol_list)
+max_weight_list = map(lambda x: float(max_weight_dict.get(x,1.0)), symbol_list)
+
+# print "expected_rtn_list: %s" % (expected_rtn_list)
+# print "cov_matrix: %s" % (cov_matrix)
+# print "max_weight_list: %s" % (max_weight_list)
 
 for i in range(N):
 
@@ -197,6 +202,7 @@ for i in range(N):
     sol_vec = np.asarray(sol_list)
     sol_vec_T = np.matrix(sol_vec).T
 
+    target_port_exp_rtn_list = map(lambda x: x[0]*x[1]*float(config["general"]["capital"]), zip(sol_list,expected_rtn_list))
     target_port_exp_rtn = float(np.asarray(expected_rtn_list) * sol_vec_T)
     target_port_stdev = math.sqrt(float((sol_vec * cov_matrix) * sol_vec_T))
     target_port_sharpe_ratio = float(target_port_exp_rtn / target_port_stdev)
@@ -206,9 +212,14 @@ for i in range(N):
         mu_sd_sharpe_soln_list.append(float(target_port_exp_rtn))
         mu_sd_sharpe_soln_list.append(float(target_port_stdev))
         mu_sd_sharpe_soln_list.append(float(target_port_sharpe_ratio))
+        mu_sd_sharpe_soln_list.append(target_port_exp_rtn_list)
         mu_sd_sharpe_soln_list.append(sol_list)
 
-target_port_exp_rtn, target_port_stdev, target_port_sharpe_ratio, sol_list = tuple(mu_sd_sharpe_soln_list)
+if len(mu_sd_sharpe_soln_list) == 0:
+    print "No solution found"
+    sys.exit(0)
+
+target_port_exp_rtn, target_port_stdev, target_port_sharpe_ratio, target_port_exp_rtn_list, sol_list = tuple(mu_sd_sharpe_soln_list)
 
 print
 
@@ -218,11 +229,17 @@ print
 kelly_f = float(target_port_exp_rtn / target_port_stdev / target_port_stdev)
 print "Kelly f* = %s" % (kelly_f)
 kelly_f = min(kelly_f,1.0)
-print "Kelly f* (unleveraged) = %s" % (kelly_f)
+print "Kelly f* (adjusted) = %s" % (kelly_f)
 
 print
 print "Market portfolio:  E[r] = %s stdev = %s Sharpe ratio = %s" % (str(round(target_port_exp_rtn*100, 3)) + " %", str(round(target_port_stdev*100,3)) + " %", round(target_port_sharpe_ratio,3))
 print "Target portfolio:  E[r] = %s stdev = %s" % (str(round(target_port_exp_rtn*kelly_f*100, 3)) + " %", str(round(target_port_stdev*kelly_f*100,3)) + " %")
+
+###################################################
+# target return
+###################################################
+print "Target portfolio:  Expected return for 1 year: HKD %s" % (intWithCommas(int(sum(target_port_exp_rtn_list))))
+print '\n'.join(map(lambda x: justify_str(x[0],7) + ":  HKD " + justify_str(intWithCommas(int(x[1])),8), sorted(zip(symbol_list,target_port_exp_rtn_list), key=lambda tup: tup[1], reverse=True)))
 
 ###################################################
 # current positions
@@ -239,7 +256,7 @@ if len(current_pos_list) > 0:
     cur_pos_vec_T = np.matrix(cur_pos_vec).T
     cur_port_exp_rtn = float(np.asarray(expected_rtn_list) * cur_pos_vec_T)
     cur_port_stdev = math.sqrt(float((cur_pos_vec * cov_matrix) * cur_pos_vec_T))
-    cur_port_sharpe_ratio = float(cur_port_exp_rtn / cur_port_stdev)
+    cur_port_sharpe_ratio = float(cur_port_exp_rtn / cur_port_stdev) if abs(cur_port_stdev) > 0.0001 else 0.0
 ###################################################
 
 ###################################################
