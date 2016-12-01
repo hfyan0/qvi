@@ -10,6 +10,11 @@ then
     cat config_actual.ini > config.ini
     cat current_positions_actual.csv > current_positions.csv
 
+elif [[ $1 -eq 2007 ]]
+then
+    cat current_prices_20071101.csv > current_prices.csv
+    cat config_20071101.ini > config.ini
+
 elif [[ $1 -eq 2008 ]]
 then
     cat current_prices_20081027.csv > current_prices.csv
