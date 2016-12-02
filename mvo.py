@@ -204,25 +204,29 @@ for i in range(N):
     market_port_exp_rtn = float(np.asarray(expected_rtn_list) * sol_vec_T)
     market_port_stdev = math.sqrt(float((sol_vec * cov_matrix) * sol_vec_T))
     market_port_sharpe_ratio = float(market_port_exp_rtn / market_port_stdev)
-    market_port_kelly_f = float(market_port_exp_rtn / market_port_stdev / market_port_stdev)
-    market_port_kelly_f_adj = min(market_port_kelly_f, float(config["general"]["max_allowed_leverage"]))
+    market_port_kelly_f_true = float(market_port_exp_rtn / market_port_stdev / market_port_stdev)
+    market_port_kelly_f_for_ranking = min(market_port_kelly_f_true, float(config["general"]["risk_aversion"]))
+    market_port_kelly_f = min(market_port_kelly_f_true, float(config["general"]["max_allowed_leverage"]))
 
-    target_port_exp_rtn = (market_port_exp_rtn * market_port_kelly_f_adj) - (max(market_port_kelly_f_adj-1.0,0.0)*float(config["general"]["financing_cost"]))
-    target_port_stdev = (market_port_stdev * market_port_kelly_f_adj)
-    target_port_sharpe_ratio = (target_port_exp_rtn / target_port_stdev)
-    target_port_exp_dollar_rtn_list = map(lambda x: x * market_port_kelly_f_adj, market_port_exp_dollar_rtn_list)
-    sol_list = map(lambda x: x * market_port_kelly_f_adj, sol_list)
+    target_port_exp_rtn_aft_costs_for_ranking = (market_port_exp_rtn * market_port_kelly_f_for_ranking) - (max(market_port_kelly_f_for_ranking-1.0,0.0)*float(config["general"]["financing_cost"]))
+    target_port_exp_rtn_aft_costs = (market_port_exp_rtn * market_port_kelly_f) - (max(market_port_kelly_f-1.0,0.0)*float(config["general"]["financing_cost"]))
+    target_port_stdev = (market_port_stdev * market_port_kelly_f)
+    target_port_sharpe_ratio = (target_port_exp_rtn_aft_costs / target_port_stdev)
+    target_port_exp_dollar_rtn_list = map(lambda x: x * market_port_kelly_f, market_port_exp_dollar_rtn_list)
+    sol_list = map(lambda x: x * market_port_kelly_f, sol_list)
 
-    if (len(mu_sd_sharpe_soln_list) == 0) or (target_port_exp_rtn > mu_sd_sharpe_soln_list[0]):
+    if (len(mu_sd_sharpe_soln_list) == 0) or (target_port_exp_rtn_aft_costs_for_ranking > mu_sd_sharpe_soln_list[0]):
         mu_sd_sharpe_soln_list = []
-        mu_sd_sharpe_soln_list.append(float(target_port_exp_rtn))
+        mu_sd_sharpe_soln_list.append(float(target_port_exp_rtn_aft_costs_for_ranking))
+        mu_sd_sharpe_soln_list.append(float(target_port_exp_rtn_aft_costs))
         mu_sd_sharpe_soln_list.append(float(target_port_stdev))
         mu_sd_sharpe_soln_list.append(float(target_port_sharpe_ratio))
         mu_sd_sharpe_soln_list.append(float(market_port_exp_rtn))
         mu_sd_sharpe_soln_list.append(float(market_port_stdev))
         mu_sd_sharpe_soln_list.append(float(market_port_sharpe_ratio))
         mu_sd_sharpe_soln_list.append(float(market_port_kelly_f))
-        mu_sd_sharpe_soln_list.append(float(market_port_kelly_f_adj))
+        mu_sd_sharpe_soln_list.append(float(market_port_kelly_f_true))
+        mu_sd_sharpe_soln_list.append(float(market_port_kelly_f_for_ranking))
         mu_sd_sharpe_soln_list.append(target_port_exp_dollar_rtn_list)
         mu_sd_sharpe_soln_list.append(sol_list)
 
@@ -230,17 +234,20 @@ if len(mu_sd_sharpe_soln_list) == 0:
     print "No solution found"
     sys.exit(0)
 
-target_port_exp_rtn, target_port_stdev, target_port_sharpe_ratio, market_port_exp_rtn, market_port_stdev, market_port_sharpe_ratio, market_port_kelly_f, market_port_kelly_f_adj, target_port_exp_dollar_rtn_list, sol_list = tuple(mu_sd_sharpe_soln_list)
+target_port_exp_rtn_aft_costs_for_ranking, target_port_exp_rtn_aft_costs, target_port_stdev, target_port_sharpe_ratio, market_port_exp_rtn, market_port_stdev, market_port_sharpe_ratio, market_port_kelly_f, market_port_kelly_f_true, market_port_kelly_f_for_ranking, target_port_exp_dollar_rtn_list, sol_list = tuple(mu_sd_sharpe_soln_list)
 
 print
-print "Market portfolio:  E[r] = %s stdev = %s Sharpe ratio = %s Kelly f* = %s (adj: %s)" % (str(round(market_port_exp_rtn*100, 3)) + " %", str(round(market_port_stdev*100,3)) + " %", round(market_port_sharpe_ratio,3), str(round(market_port_kelly_f,3)), market_port_kelly_f_adj)
-print "Target portfolio:  E[r] = %s stdev = %s Sharpe ratio = %s" % (str(round(target_port_exp_rtn*100, 3)) + " %", str(round(target_port_stdev*100,3)) + " %", round(target_port_sharpe_ratio,3))
+print "Market portfolio:  E[r] = %s stdev = %s Sharpe ratio = %s Risk aversion: %s Kelly f* = %s (for_ranking: %s, used: %s)" % (str(round(market_port_exp_rtn*100, 3)) + " %", str(round(market_port_stdev*100,3)) + " %", round(market_port_sharpe_ratio,3), config["general"]["risk_aversion"], str(round(market_port_kelly_f_true,3)), round(market_port_kelly_f_for_ranking,3), round(market_port_kelly_f,3))
+print "Target portfolio:  E[r] = %s stdev = %s Sharpe ratio = %s" % (str(round(target_port_exp_rtn_aft_costs*100, 3)) + " %", str(round(target_port_stdev*100,3)) + " %", round(target_port_sharpe_ratio,3))
 
 ###################################################
 # target return
 ###################################################
+financing_dollar_cost = max(market_port_kelly_f-1.0,0.0)*float(config["general"]["capital"])*float(config["general"]["financing_cost"])
 print "Target portfolio:  Expected return for 1 year: HKD %s" % (intWithCommas(int(sum(target_port_exp_dollar_rtn_list))))
+print "Target portfolio:  Expected return for 1 year: HKD %s (after financing costs)" % (intWithCommas(int(sum(target_port_exp_dollar_rtn_list)-financing_dollar_cost)))
 print '\n'.join(map(lambda x: justify_str(x[0],7) + ":  HKD " + justify_str(intWithCommas(int(x[1])),8), filter(lambda y: abs(y[1]) > 1 , sorted(zip(symbol_list,target_port_exp_dollar_rtn_list), key=lambda tup: tup[1], reverse=True))))
+print "Financing dollar cost: HKD %s" % (intWithCommas(int(financing_dollar_cost)))
 
 ###################################################
 # current positions
@@ -273,7 +280,7 @@ if len(current_pos_list) > 0:
     current_port_exp_dollar_rtn_list = map(lambda s: (s,int(expected_rtn_dict[s] * current_mkt_val_dict[s])), current_mkt_val_dict.keys())
     print "Current portfolio: E[r] = %s stdev = %s Sharpe ratio = %s Kelly f* = %s" % (str(round(cur_port_exp_rtn*100, 3)) + " %", str(round(cur_port_stdev*100,3)) + " %", round(cur_port_sharpe_ratio,3), round(cur_port_exp_rtn/cur_port_stdev/cur_port_stdev,3))
 
-print "Target portfolio:  Market value: HKD %s" % (justify_str(intWithCommas(int(float(config["general"]["capital"])*market_port_kelly_f_adj)),11))
+print "Target portfolio:  Market value: HKD %s" % (justify_str(intWithCommas(int(float(config["general"]["capital"])*market_port_kelly_f)),11))
 if len(current_pos_list) > 0:
     print "Current portfolio: Market value: HKD %s" % (justify_str(intWithCommas(int(sum(current_mkt_val_dict.values()))),11))
     print "Current portfolio: Expected return for 1 year: HKD %s" % (intWithCommas(int(sum(map(lambda x: x[1], current_port_exp_dollar_rtn_list)))))

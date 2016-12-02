@@ -1,18 +1,28 @@
 #!/bin/bash
 source common.sh
 
-CUR_PRICE_FILE="../current_prices.csv"
 DOMAIN="www.google.com.hk"
 TMPFILE="$ETF_INFO_FOLDER/tmpfile"
-cat /dev/null > $CUR_PRICE_FILE
+EXCHGLIST_ALL="HK US"
 
-for i in "HK" "US"
+if [[ $# -gt 0 ]]
+then
+    EXCHGLIST="$@"
+    for e in $EXCHGLIST
+    do
+        cat /dev/null > "../current_prices_"$e".csv"
+    done
+else
+    EXCHGLIST=$EXCHGLIST_ALL
+fi
+
+for e in $EXCHGLIST
 do
-    if [[ $i == "HK" ]]
+    if [[ $e == "HK" ]]
     then
         SYMBOL_LIST="$HK_SYMBOL_LIST"
         EXCHANGE="HKG"
-    elif [[ $i == "US" ]]
+    elif [[ $e == "US" ]]
     then
         SYMBOL_LIST="$US_SYMBOL_LIST"
         EXCHANGE="NYSEARCA"
@@ -21,9 +31,11 @@ do
     for SYMBOL in $SYMBOL_LIST
     do
         wget -O $TMPFILE "https://$DOMAIN/finance?q="$EXCHANGE"%3A"$SYMBOL"&hl=en"
-        echo -n "$SYMBOL," >> $CUR_PRICE_FILE
-        cat $TMPFILE | grep ref_ | head -n 1 | sed -e 's/<\/.*$//' | sed -e 's/^.*>//' >> $CUR_PRICE_FILE
+        echo -n "$SYMBOL," >> "../current_prices_"$e".csv"
+        cat $TMPFILE | grep ref_ | head -n 1 | sed -e 's/<\/.*$//' | sed -e 's/^.*>//' >> "../current_prices_"$e".csv"
     done
 done
+
+cat ../current_prices_* > ../current_prices.csv
 
 rm -f $TMPFILE

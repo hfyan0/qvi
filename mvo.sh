@@ -1,9 +1,20 @@
 #!/bin/bash
 
+if [[ $1 == 'h' ]]
+then
+    echo "Usage: $(basename $0) [p] [HK|US]"
+    exit
+fi
+
 if [[ $1 == 'p' ]]
 then
     cd tools
-    ./download_google_px.sh
+    if [[ -n $2 ]]
+    then
+        ./download_google_px.sh $2
+    else
+        ./download_google_px.sh
+    fi
     ./add_current_px_manually.sh
     cd ..
 
