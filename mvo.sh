@@ -8,6 +8,9 @@ fi
 
 if [[ $1 == 'p' ]]
 then
+    cat config_actual.ini > config.ini
+    cat current_positions_actual.csv > current_positions.csv
+
     cd tools
     if [[ -n $2 ]]
     then
@@ -17,9 +20,6 @@ then
     fi
     ./add_current_px_manually.sh
     cd ..
-
-    cat config_actual.ini > config.ini
-    cat current_positions_actual.csv > current_positions.csv
 
 elif [[ $1 -eq 2007 ]]
 then
@@ -31,7 +31,12 @@ then
     cat current_prices_20081027.csv > current_prices.csv
     cat config_20081027.ini > config.ini
 else
+    cat current_prices_*.csv > current_prices.csv
+    cat current_positions_actual.csv > current_positions.csv
     cat config_actual.ini > config.ini
+    cd tools
+    ./add_current_px_manually.sh
+    cd ..
 fi
 
 python calc_expected_return.py

@@ -19,13 +19,16 @@ def justify_str(s,totlen,left_right,padchar):
     else:
         return s
 
-def calc_req_rate_of_return(g,pe):
+def calc_req_rate_of_return(g,p,e):
     g=float(g)
-    pe=float(pe)
-    return (2.0+g-pe+math.sqrt(math.pow(pe-2.0-g,2.0)+4.0*pe))/2.0/pe
+    # pe=float(pe)
+    p=float(p)
+    e=float(e)
+    # return (2.0+g-pe+math.sqrt(math.pow(pe-2.0-g,2.0)+4.0*pe))/2.0/pe
+    return e*(1+g) / (p-e*(1+g))
 
-def est_expected_rtn(req_rate,divd_yield,stamp_duty_rate,fund_expense_ratio):
-    return min((0.8*req_rate+0.2*divd_yield),req_rate)-stamp_duty_rate-fund_expense_ratio
+def est_expected_rtn(req_rate,stamp_duty_rate,fund_expense_ratio):
+    return req_rate-stamp_duty_rate-fund_expense_ratio
 
 config = ConfigObj('config.ini')
 cur_px_dict = dict(map(lambda x: (x[0],float(x[1])), read_file(config["general"]["current_prices"])))
@@ -42,15 +45,15 @@ sym_with_divd_yield = filter(lambda x: x in traded_symbol_list, divd_per_share_d
 sym_divd_yield_dict = dict(map(lambda s: (s,(((divd_per_share_dict[s] * (1-divd_withholdg_tax_rate_dict.get(s,0.0))/cur_px_dict[s])) if divd_per_share_dict[s] > 0.0 else -fund_expense_ratio_dict.get(s,0.0)) + expected_bond_px_rtn_dict.get(s,0.0)), sym_with_divd_yield))
 
 sym_with_req_rate_rtn = filter(lambda x: x in traded_symbol_list, eps_dict.keys())
-sym_req_rate_rtn_dict = dict(map(lambda s: (s,est_expected_rtn(calc_req_rate_of_return(growth_rate_dict.get(s,0),cur_px_dict[s]/eps_dict[s]),sym_divd_yield_dict[s],stamp_duty_rate_dict.get(s,0.0),fund_expense_ratio_dict.get(s,0.0))), sym_with_req_rate_rtn))
+sym_req_rate_rtn_dict = dict(map(lambda s: (s,est_expected_rtn(calc_req_rate_of_return(growth_rate_dict.get(s,0),cur_px_dict[s],eps_dict[s]),stamp_duty_rate_dict.get(s,0.0),fund_expense_ratio_dict.get(s,0.0))), sym_with_req_rate_rtn))
 
 symbol_list = sorted(list(set(sym_req_rate_rtn_dict.keys() + sym_divd_yield_dict.keys())))
 
-sys.stdout.write("    symbol")
-sys.stdout.write("      divd")
-sys.stdout.write("  req rate")
-sys.stdout.write("\n")
-print '\n'.join(map(lambda s: justify_str(s,10,"right",' ')+justify_str(round(sym_divd_yield_dict.get(s,0)*100,2),10,"right",' ')+justify_str(round(sym_req_rate_rtn_dict.get(s,0)*100,2),10,"right",' '), sorted(symbol_list)))
+# sys.stdout.write("    symbol")
+# sys.stdout.write("      divd")
+# sys.stdout.write("  req rate")
+# sys.stdout.write("\n")
+# print '\n'.join(map(lambda s: justify_str(s,10,"right",' ')+justify_str(round(sym_divd_yield_dict.get(s,0)*100,2),10,"right",' ')+justify_str(round(sym_req_rate_rtn_dict.get(s,0)*100,2),10,"right",' '), sorted(symbol_list)))
 
 sym_exp_rtn_list = []
 for s in symbol_list:

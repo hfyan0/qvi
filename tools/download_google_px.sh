@@ -1,20 +1,21 @@
 #!/bin/bash
 source common.sh
 
-DOMAIN="www.google.com.hk"
+DOMAIN="www.google.com"
 TMPFILE="$ETF_INFO_FOLDER/tmpfile"
 EXCHGLIST_ALL="HK US"
 
 if [[ $# -gt 0 ]]
 then
     EXCHGLIST="$@"
-    for e in $EXCHGLIST
-    do
-        cat /dev/null > "../current_prices_"$e".csv"
-    done
 else
     EXCHGLIST=$EXCHGLIST_ALL
 fi
+
+for e in $EXCHGLIST
+do
+    cat /dev/null > "../current_prices_"$e".csv"
+done
 
 for e in $EXCHGLIST
 do

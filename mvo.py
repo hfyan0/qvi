@@ -120,7 +120,10 @@ def markowitz(symbol_list,expected_rtn_list,cov_matrix,mu_p,max_weight_list):
     b = cvxopt.matrix([ 1.0, float(mu_p) ])
 
     solvers.options['show_progress'] = False
-    sol = solvers.qp(P, q, G, h, A, b)
+    try:
+        sol = solvers.qp(P, q, G, h, A, b)
+    except:
+        return None
 
     if sol['status'] != 'optimal':
         return None
@@ -289,12 +292,14 @@ if len(current_pos_list) > 0:
 ###################################################
 # solution
 ###################################################
-header = "   Symbol:                      %     Amount (HKD)  |      Current  |         Diff"
+header = "   Symbol:      Price         E[r] %           %     Amount (HKD)  |      Current  |         Diff"
 columns = []
 columns.append(map(lambda x: justify_str(x[0],9), sym_sol_list))
 columns.append(map(lambda x: ": ", sym_sol_list))
 columns.append(map(lambda x: justify_str(cur_px_dict.get(x[0],"---"),10), sym_sol_list))
 columns.append(map(lambda x: "   ", sym_sol_list))
+columns.append(map(lambda x: justify_str(round(expected_rtn_dict[x[0]]*100,2),10), sym_sol_list))
+columns.append(map(lambda x: " %   ", sym_sol_list))
 columns.append(map(lambda x: justify_str(round(x[1]*100,1),7), sym_sol_list))
 columns.append(map(lambda x: " %     $ ", sym_sol_list))
 columns.append(map(lambda x: justify_str(intWithCommas(int(x[1] * float(config["general"]["capital"]))),10), sym_sol_list))
@@ -304,4 +309,6 @@ columns.append(map(lambda x: "  | $ ", sym_sol_list))
 columns.append(map(lambda x: justify_str(intWithCommas(int(x[1] * float(config["general"]["capital"]) - current_mkt_val_dict.get(x[0],0))),10), sym_sol_list))
 print
 print "Target portfolio:"
-print '\n'.join([header]+map(lambda x: ''.join(x), zip(columns[0],columns[1],columns[2],columns[3],columns[4],columns[5],columns[6],columns[7],columns[8],columns[9],columns[10])))
+
+targetportdetails_list=[header]+map(lambda x: ''.join(x), zip(columns[0],columns[1],columns[2],columns[3],columns[4],columns[5],columns[6],columns[7],columns[8],columns[9],columns[10],columns[11],columns[12]))
+print '\n'.join(map(lambda x: justify_str(x[0],5)+")"+x[1], enumerate(targetportdetails_list)))
