@@ -137,10 +137,10 @@ def markowitz(symbol_list,expected_rtn_list,cov_matrix,mu_p,max_weight_list):
 config = ConfigObj('config.ini')
 
 symbol_list = sorted([i for k in map(lambda x: config["general"][x].split(','), filter(lambda x: "traded_symbols" in x, config["general"].keys())) for i in k])
-print "Symbols: %s" % (','.join(symbol_list))
+# print "Symbols: %s" % (','.join(symbol_list))
 
 specific_riskiness_list = map(lambda s: float(config["specific_riskiness"].get(s,0)), symbol_list)
-print "Riskiness: %s" % (','.join(map(str, specific_riskiness_list)))
+# print "Riskiness: %s" % (','.join(map(str, specific_riskiness_list)))
 
 ###################################################
 # read time series of prices
