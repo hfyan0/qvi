@@ -9,7 +9,7 @@ fi
 if [[ $1 == 'p' ]]
 then
     cat config_actual.ini > config.ini
-    cat current_positions_actual.csv > current_positions.csv
+    cat current_positions_sunny.csv > current_positions.csv
 
     cd tools
     if [[ -n $2 ]]
@@ -32,7 +32,7 @@ then
     cat config_20081027.ini > config.ini
 else
     cat current_prices_*.csv > current_prices.csv
-    cat current_positions_actual.csv > current_positions.csv
+    cat current_positions_sunny.csv > current_positions.csv
     cat config_actual.ini > config.ini
     cd tools
     ./add_current_px_manually.sh

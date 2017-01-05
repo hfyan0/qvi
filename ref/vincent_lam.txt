@@ -1,0 +1,42 @@
+2016-06-30
+
+6.1    62         Transport International Holdings Ltd         
+5.5    1099       Sinopharm Group Co Ltd                                        
+4.4    1426       Spring Real Estate Investment Trust          
+4.4    517        COSCO International Holdings Ltd                              
+3.6    1599       Beijing Urban Construction Design & Development               
+3.3    700        Tencent Holdings Ltd                         
+3.3    939        China Construction Bank Corp                                  
+3.1    388        Hong Kong Exchanges & Clearing Ltd                            
+3.1    2380       China Power International Development Ltd                     
+2.5    157        Natural Beauty Bio-Technology Ltd                             
+2.5    799        IGG Inc                                                       
+2.4    468        Greatview Aseptic Packaging Company Ltd                       
+2.3    1999       Man Wah Holdings Ltd                                          
+2.2    941        China Mobile Ltd                                              
+2.0    321        Texwinca Holdings Ltd                        
+2.0    966        China Taiping Insurance Holdings Co Ltd                       
+1.9    958        Huaneng Renewables Corp Ltd                                   
+1.8    857        PetroChina Co Ltd                                             
+1.7    52         Fairwood Holdings Ltd                                         
+1.6    3336       Ju Teng International Holdings Ltd                            
+1.6    1816       CGN Power Co Ltd                                              
+1.3    54         Hopewell Holdings Ltd                                         
+1.1    669        Techtronic Industries Co Ltd                 
+1.1    1170       Kingmaker Footwear Holdings Ltd                               
+1.1    2356       Dah Sing Banking Group Ltd                                    
+1.0    1023       Sitoy Group Holdings Ltd                     
+1.0    598        Sinotrans Ltd                                                 
+1.0    3813       Pou Sheng International Holdings Ltd                          
+1.0    207        Joy City Property Ltd                                         
+1.0    1330       Dynagreen Environmental Protection Group Co Ltd               
+1.0    8138       Beijing Tong Ren Tang Chinese Medicine Co Ltd                 
+0.9    686        United Photovoltaics Group Ltd               
+0.8    1899       Xingda International Holdings Ltd            
+0.8    8049       Jilin Province Huinan Changlong Bio-pharmacy Co Ltd           
+0.7    1447       SFK Construction Holdings Ltd                                 
+0.6    2028       Jolimark Holdings Ltd                                         
+0.6    2348       Dawnrays Pharmaceutical Holdings Ltd                          
+0.4    319        China Metal International Holding Inc                         
+0.2    1700       Springland International Holdings Ltd        
+0.1    999        I.T Ltd                                                       
