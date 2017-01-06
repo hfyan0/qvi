@@ -1,10 +1,13 @@
 #!/usr/bin/env python
-from mvo import calc_correl,calc_cov_matrix_annualized,calc_mean_vec,calc_return_list,calc_sd,calc_var,conv_to_hkd,get_annualization_factor,intWithCommas,justify_str,markowitz,read_file
 from configobj import ConfigObj
 import sys
 import math
 from datetime import datetime, timedelta
 import numpy as np
+
+import os
+sys.path.append(os.path.dirname(sys.path[0]))
+from mvo import calc_correl,calc_cov_matrix_annualized,calc_mean_vec,calc_return_list,calc_sd,calc_var,conv_to_hkd,get_annualization_factor,intWithCommas,justify_str,markowitz,read_file
 
 ###################################################
 config = ConfigObj('config.ini')
