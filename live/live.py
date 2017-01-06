@@ -7,7 +7,7 @@ import numpy as np
 
 import os
 sys.path.append(os.path.dirname(sys.path[0]))
-from mvo import calc_correl,calc_cov_matrix_annualized,calc_mean_vec,calc_return_list,calc_sd,calc_var,conv_to_hkd,get_annualization_factor,intWithCommas,justify_str,markowitz,read_file
+from mvo import calc_cov_matrix_annualized,conv_to_hkd,intWithCommas,justify_str,markowitz,read_file
 
 ###################################################
 config = ConfigObj('config.ini')

@@ -6,6 +6,13 @@ import cvxopt
 from cvxopt import blas, solvers
 from datetime import datetime, timedelta
 
+###################################################
+# FIXME
+###################################################
+DEFAULT_CORREL = 0.6
+DEFAULT_SD = 0.5
+###################################################
+
 def conv_to_hkd(currency,amt):
     if currency == "USD":
         return 7.8 * float(amt)
@@ -44,25 +51,34 @@ def calc_correl(ts_a,ts_b):
     common_date_set = set(map(lambda x: x[0], ts_a)).intersection(set(map(lambda x: x[0], ts_b)))
     a_ext = map(lambda x: x[1], filter(lambda x: x[0] in common_date_set, ts_a))
     b_ext = map(lambda x: x[1], filter(lambda x: x[0] in common_date_set, ts_b))
-    return round(np.corrcoef(calc_return_list(a_ext),calc_return_list(b_ext))[0][1],5)
+    if len(a_ext) <= 30 or len(b_ext) <= 30:
+        return DEFAULT_CORREL
+    else:
+        return round(np.corrcoef(calc_return_list(a_ext),calc_return_list(b_ext))[0][1],5)
 
 def calc_var(ts):
     r_ls = calc_return_list(ts)
     n = len(r_ls)
-    m = float(sum(r_ls))/n
-    return sum(map(lambda x: math.pow(x-m,2), r_ls)) / float(n)
+    if n < 30:
+        return DEFAULT_SD*DEFAULT_SD
+    else:
+        m = float(sum(r_ls))/n
+        return sum(map(lambda x: math.pow(x-m,2), r_ls)) / float(n)
 
 def calc_sd(ts):
     return math.sqrt(calc_var(ts))
 
 def get_annualization_factor(date_list):
-    min_diff = min(map(lambda x: (x[0]-x[1]).days, zip(date_list[1:],date_list[:-1])))
-    if min_diff == 1:
-        return 252
-    elif min_diff == 7:
-        return 52
+    if len(date_list) < 10:
+        return 0
     else:
-        return 12
+        min_diff = min(map(lambda x: (x[0]-x[1]).days, zip(date_list[1:],date_list[:-1])))
+        if min_diff == 1:
+            return 252
+        elif min_diff == 7:
+            return 52
+        else:
+            return 12
 
 def calc_cov_matrix_annualized(sym_time_series_list, specific_riskiness_list):
     ###################################################
