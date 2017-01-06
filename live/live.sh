@@ -9,9 +9,9 @@ fi
 HOME_FOLDER="$HOME/Dropbox/nirvana/mvo/"
 LIVE_FOLDER="$HOME/Dropbox/nirvana/mvo/live/"
 
-cd $LIVE_FOLDER
 if [[ $1 == 'p' ]]
 then
+    cd $LIVE_FOLDER
     cat config_actual.ini > config.ini
     cat current_positions_sunny.csv > current_positions.csv
 
@@ -23,17 +23,8 @@ then
         ./download_google_px.sh
     fi
     ./add_current_px_manually.sh
-
-elif [[ $1 -eq 2007 ]]
-then
-    cat current_prices_20071101.csv > current_prices.csv
-    cat config_20071101.ini > config.ini
-
-elif [[ $1 -eq 2008 ]]
-then
-    cat current_prices_20081027.csv > current_prices.csv
-    cat config_20081027.ini > config.ini
 else
+    cd $LIVE_FOLDER
     cat current_prices_*.csv > current_prices.csv
     cat current_positions_sunny.csv > current_positions.csv
     cat config_actual.ini > config.ini
