@@ -4,6 +4,8 @@ source common.sh
 DOMAIN="www.google.com"
 TMPFILE="$ETF_INFO_FOLDER/tmpfile"
 EXCHGLIST_ALL="HK US"
+PX_FILE_PREFIX="../live/current_prices_"
+PX_FILE="../live/current_prices.csv"
 
 if [[ $# -gt 0 ]]
 then
@@ -14,7 +16,7 @@ fi
 
 for e in $EXCHGLIST
 do
-    cat /dev/null > "../current_prices_"$e".csv"
+    cat /dev/null > "$PX_FILE_PREFIX"$e".csv"
 done
 
 for e in $EXCHGLIST
@@ -32,11 +34,11 @@ do
     for SYMBOL in $SYMBOL_LIST
     do
         wget -O $TMPFILE "https://$DOMAIN/finance?q="$EXCHANGE"%3A"$SYMBOL"&hl=en"
-        echo -n "$SYMBOL," >> "../current_prices_"$e".csv"
-        cat $TMPFILE | grep ref_ | head -n 1 | sed -e 's/<\/.*$//' | sed -e 's/^.*>//' >> "../current_prices_"$e".csv"
+        echo -n "$SYMBOL," >> "$PX_FILE_PREFIX"$e".csv"
+        cat $TMPFILE | grep ref_ | head -n 1 | sed -e 's/<\/.*$//' | sed -e 's/^.*>//' >> "$PX_FILE_PREFIX"$e".csv"
     done
 done
 
-cat ../current_prices_* > ../current_prices.csv
+cat $PX_FILE_PREFIX* > $PX_FILE
 
 rm -f $TMPFILE
