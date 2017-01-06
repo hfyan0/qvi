@@ -41,4 +41,4 @@ fi
 
 python calc_expected_return.py
 
-python mvo.py | grep -v Terminated 2>&1
+python live.py | grep -v Terminated 2>&1
