@@ -17,6 +17,9 @@ def get_risk_aversion_factor(dt,hsi_expected_return_list):
     # risk_aversion_factor = max(min(10.0-exp_rtn,10.0),0.0)
     # print "risk_aversion_factor: %s %s" % (dt,risk_aversion_factor)
     # return risk_aversion_factor
+    ###################################################
+    # does not seem to affect the optimization when no risk free asset
+    ###################################################
     return 1.0
 
 ###################################################
@@ -30,18 +33,23 @@ max_weight_dict = config["max_weight"]
 her = config["general"]["hsi_expected_return"]
 hsi_expected_return_list = map(lambda y: (datetime.strptime(y[1],"%Y-%m-%d").date(),float(y[2])), filter(lambda x: x[0]%2==0, zip(range(len(her)-1),her[:-1],her[1:])))
 
+hsi_hhi_constituents_list = map(lambda x: (x[0],datetime.strptime(x[1],"%Y-%m-%d").date(),datetime.strptime(x[2],"%Y-%m-%d").date()), read_file(config["general"]["hsi_hhi_constituents"]))
+
 ###################################################
 hist_adj_px_list = sorted(map(lambda d: (datetime.strptime(d[0],"%Y-%m-%d").date(),d[1],float(d[2])), read_file(config["general"]["hist_adj_px"])), key=lambda x: x[0])
 hist_adj_px_dict = {}
 for d,it_lstup in groupby(hist_adj_px_list, lambda x: x[0]):
     hist_adj_px_dict[d] = dict(map(lambda x: (x[1],x[2]), list(it_lstup)))
 
-hist_pb_ratio_dict = {}
+hist_bp_ratio_dict = {}
 for d,it_lstup in groupby(sorted(read_file(config["general"]["hist_pb_ratio"]), key=lambda x: x[0]), lambda x: x[0]):
-    hist_pb_ratio_dict[datetime.strptime(d,"%Y-%m-%d").date()] = dict(map(lambda x: (x[1],float(x[2])), list(it_lstup)))
+    if config["general"]["prefer_low_pb"].lower() == "true":
+        hist_bp_ratio_dict[datetime.strptime(d,"%Y-%m-%d").date()] = dict(map(lambda x: (x[1],1.0/float(x[2])), list(it_lstup)))
+    else:
+        hist_bp_ratio_dict[datetime.strptime(d,"%Y-%m-%d").date()] = dict(map(lambda x: (x[1],float(x[2])), list(it_lstup)))
 
 start_date = datetime.strptime(config["general"]["start_date"],"%Y-%m-%d").date()
-date_list = sorted(filter(lambda x: x >= start_date, list(set(hist_adj_px_dict.keys()).intersection(set(hist_pb_ratio_dict.keys())))))
+date_list = sorted(filter(lambda x: x >= start_date, list(set(hist_adj_px_dict.keys()).intersection(set(hist_bp_ratio_dict.keys())))))
 
 rebalance_date_list = map(lambda y: y[1], filter(lambda x: x[0]%rebalance_interval==0, [(i,d) for i,d in enumerate(date_list)]))
 
@@ -51,16 +59,18 @@ cash = float(config["general"]["init_capital"])
 
 ###################################################
 for dt in rebalance_date_list:
-    sym_pb_list = filter(lambda x: x[0] in traded_symbol_set, sorted(list(hist_pb_ratio_dict[dt].items()), key=lambda x: x[0]))
-    if len(sym_pb_list) < min_no_of_avb_sym:
+    avb_constituent_set = set(map(lambda x: x[0], filter(lambda z: dt<=z[2], filter(lambda y: y[1]<=dt, hsi_hhi_constituents_list))))
+    # print "avb_constituent_set: %s" % avb_constituent_set
+    sym_bp_list = sorted(filter(lambda x: (x[0] in traded_symbol_set) and (x[0] in avb_constituent_set), list(hist_bp_ratio_dict[dt].items())), key=lambda x: x[0])
+    if len(sym_bp_list) < min_no_of_avb_sym:
         continue
     # print dt
-    symbol_list = map(lambda x: x[0], sym_pb_list)
-    # print symbol_list
-    expected_rtn_list = map(lambda x: x[1], sym_pb_list)
+    symbol_list = map(lambda x: x[0], sym_bp_list)
+    # print "symbol_list: %s" % symbol_list
+    expected_rtn_list = map(lambda x: x[1], sym_bp_list)
     max_weight_list = map(lambda x: float(max_weight_dict[x]), symbol_list)
-    from_tgt_rtn = min(map(lambda x: x[1], sym_pb_list))
-    to_tgt_rtn = max(map(lambda x: x[1], sym_pb_list))
+    from_tgt_rtn = min(map(lambda x: x[1], sym_bp_list))
+    to_tgt_rtn = max(map(lambda x: x[1], sym_bp_list))
 
     ###################################################
     specific_riskiness_list = map(lambda s: 0.0, symbol_list)
