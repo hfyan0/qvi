@@ -104,7 +104,7 @@ for dt in rebalance_date_list:
         ###################################################
         # sell all pos
         ###################################################
-        cash += float(sum([hist_adj_px_dict[dt].get(s,filter(lambda x: x[1]==s, hist_adj_px_list)[-1])*pos for s,pos in pos_dict.items()]))
+        cash += float(sum([hist_adj_px_dict[dt].get(s,filter(lambda x: x[1]==s, hist_adj_px_list)[-1][2])*pos for s,pos in pos_dict.items()]))
         pos_dict = {}
         ###################################################
 
