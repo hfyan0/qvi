@@ -32,7 +32,6 @@ max_weight_dict = config["max_weight"]
 
 her = config["general"]["hsi_expected_return"]
 hsi_expected_return_list = map(lambda y: (datetime.strptime(y[1],"%Y-%m-%d").date(),float(y[2])), filter(lambda x: x[0]%2==0, zip(range(len(her)-1),her[:-1],her[1:])))
-
 hsi_hhi_constituents_list = map(lambda x: (x[0],datetime.strptime(x[1],"%Y-%m-%d").date(),datetime.strptime(x[2],"%Y-%m-%d").date()), read_file(config["general"]["hsi_hhi_constituents"]))
 
 ###################################################
