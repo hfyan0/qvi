@@ -72,9 +72,8 @@ print
 print "%s%s%s%s%s" % (justify_str("Symbol",8),justify_str("E[r]",10),justify_str("SD[r]",10),justify_str("SD_adj[r]",10),justify_str("Sharpe",10))
 print '\n'.join(map(lambda x: justify_str(x[0],8)+justify_str(x[1],10)+justify_str(x[2],10)+justify_str(x[3],10)+justify_str(x[4],10), zip(symbol_list,str_expected_rtn_list,str_annualized_sd_list,str_annualized_adj_sd_list,str_sharpe_list)))
 
-sorted_expected_rtn_list = sorted(expected_rtn_list)
-from_tgt_rtn = sorted_expected_rtn_list[0]
-to_tgt_rtn = sorted_expected_rtn_list[-1]
+from_tgt_rtn = min(expected_rtn_list)
+to_tgt_rtn = max(expected_rtn_list)
 mu_sd_sharpe_soln_list = []
 N = 1000
 
