@@ -39,6 +39,26 @@ cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualize
 # newrow = np.transpose(np.asarray(map(lambda x: 0.0, range(len(symbol_list)))))
 # cov_matrix = np.vstack([cov_matrix, newrow])
 
+###################################################
+# current positions
+###################################################
+current_pos_list = read_file(config["general"]["current_positions"])
+cur_px_dict = dict(map(lambda x: (x[0],float(x[1])), read_file(config["general"]["current_prices"])))
+current_mkt_val_dict = {}
+if len(current_pos_list) > 0:
+    current_mkt_val_dict = dict(map(lambda x: (x[0],conv_to_hkd(x[1],cur_px_dict[x[0]]*float(x[2]))), current_pos_list))
+    current_weight_dict = dict(map(lambda s: (s,current_mkt_val_dict[s]/sum(current_mkt_val_dict.values())), current_mkt_val_dict.keys()))
+    current_weight_list = map(lambda s: current_weight_dict.get(s,0.0), symbol_list)
+
+    cur_pos_vec = np.asarray(current_weight_list)
+    cur_pos_vec_T = np.matrix(cur_pos_vec).T
+    cur_port_exp_rtn = float(np.asarray(expected_rtn_list) * cur_pos_vec_T)
+    cur_port_stdev = math.sqrt(float((cur_pos_vec * cov_matrix) * cur_pos_vec_T))
+    cur_port_sharpe_ratio = float(cur_port_exp_rtn / cur_port_stdev) if abs(cur_port_stdev) > 0.0001 else 0.0
+###################################################
+
+
+
 if (config["general"]["printCovMatrix"].lower() == "true"):
     print
     print "cov_matrix"
@@ -69,7 +89,8 @@ for i in range(N):
 
     mu_p = from_tgt_rtn + (to_tgt_rtn - from_tgt_rtn) * float(i)/float(N)
     # mu_p = to_tgt_rtn * float(i)/float(N)
-    sol_list = markowitz(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list)
+    # sol_list = markowitz(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list)
+    sol_list = markowitz(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list, float(config["general"]["portfolio_change_inertia"]), current_weight_list)
 
     if sol_list is None:
         continue
@@ -127,24 +148,6 @@ print "Target portfolio:  Expected return for 1 year: HKD %s" % (intWithCommas(i
 print "Target portfolio:  Expected return for 1 year: HKD %s (after financing costs)" % (intWithCommas(int(sum(target_port_exp_dollar_rtn_list)-financing_dollar_cost)))
 # print '\n'.join(map(lambda x: justify_str(x[0],7) + ":  HKD " + justify_str(intWithCommas(int(x[1])),8), filter(lambda y: abs(y[1]) > 1 , sorted(zip(symbol_list,target_port_exp_dollar_rtn_list), key=lambda tup: tup[1], reverse=True))))
 print "Financing dollar cost: HKD %s" % (intWithCommas(int(financing_dollar_cost)))
-
-###################################################
-# current positions
-###################################################
-current_pos_list = read_file(config["general"]["current_positions"])
-cur_px_dict = dict(map(lambda x: (x[0],float(x[1])), read_file(config["general"]["current_prices"])))
-current_mkt_val_dict = {}
-if len(current_pos_list) > 0:
-    current_mkt_val_dict = dict(map(lambda x: (x[0],conv_to_hkd(x[1],cur_px_dict[x[0]]*float(x[2]))), current_pos_list))
-    current_weight_dict = dict(map(lambda s: (s,current_mkt_val_dict[s]/sum(current_mkt_val_dict.values())), current_mkt_val_dict.keys()))
-    current_weight_list = map(lambda s: current_weight_dict.get(s,0.0), symbol_list)
-
-    cur_pos_vec = np.asarray(current_weight_list)
-    cur_pos_vec_T = np.matrix(cur_pos_vec).T
-    cur_port_exp_rtn = float(np.asarray(expected_rtn_list) * cur_pos_vec_T)
-    cur_port_stdev = math.sqrt(float((cur_pos_vec * cov_matrix) * cur_pos_vec_T))
-    cur_port_sharpe_ratio = float(cur_port_exp_rtn / cur_port_stdev) if abs(cur_port_stdev) > 0.0001 else 0.0
-###################################################
 
 ###################################################
 sym_sol_list = filter(lambda x: abs(x[1]) > 0.001, zip(symbol_list,sol_list))

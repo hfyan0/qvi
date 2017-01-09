@@ -110,7 +110,7 @@ def calc_cov_matrix_annualized(sym_time_series_list, specific_riskiness_list):
 def calc_mean_vec(sym_time_series_list):
     return map(lambda ts: sum(map(lambda x: x[1], ts))/len(ts), sym_time_series_list)
 
-def markowitz(symbol_list,expected_rtn_list,cov_matrix,mu_p,max_weight_list):
+def markowitz(symbol_list,expected_rtn_list,cov_matrix,mu_p,max_weight_list,portfolio_change_inertia=None,current_weight_list=None):
     def iif(cond, iftrue=1.0, iffalse=0.0):
         if cond:
             return iftrue
@@ -119,8 +119,14 @@ def markowitz(symbol_list,expected_rtn_list,cov_matrix,mu_p,max_weight_list):
 
     n = len(symbol_list)
 
-    P = cvxopt.matrix(cov_matrix)
-    q = cvxopt.matrix([0.0 for i in range(n)])
+    # P and q determine the objective function to minimize
+    # which in cvxopt is defined as $.5 x^T P x + q^T x$
+    if portfolio_change_inertia is None or current_weight_list is None:
+        P = cvxopt.matrix(cov_matrix)
+        q = cvxopt.matrix([0.0 for i in range(n)])
+    else:
+        P = cvxopt.matrix(0.5 * cov_matrix + portfolio_change_inertia * np.identity(n))
+        q = cvxopt.matrix( map(lambda x: -2 * portfolio_change_inertia * x, current_weight_list) )
 
     # G and h determine the inequality constraints in the
     # form $G x \leq h$. We write $w_i \geq 0$ as $-1 \times x_i \leq 0$
@@ -129,6 +135,7 @@ def markowitz(symbol_list,expected_rtn_list,cov_matrix,mu_p,max_weight_list):
                 for j in range(2*n)
                 ]).trans()
     h = cvxopt.matrix([ max_weight_list[j/2] * iif(j % 2) for j in range(2*n) ])
+
     # A and b determine the equality constraints defined as A x = b
     A = cvxopt.matrix([[ 1.0 for i in range(n) ],
                 expected_rtn_list]).trans()
