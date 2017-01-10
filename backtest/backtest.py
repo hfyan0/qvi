@@ -9,7 +9,7 @@ from itertools import groupby
 
 import os
 sys.path.append(os.path.dirname(sys.path[0]))
-from mvo import calc_cov_matrix_annualized,conv_to_hkd,intWithCommas,justify_str,log_optimal_growth,read_file
+from mvo import calc_cov_matrix_annualized,conv_to_hkd,intWithCommas,justify_str,markowitz,log_optimal_growth,read_file
 
 ###################################################
 def get_risk_aversion_factor(dt,hsi_expected_return_list):
@@ -27,11 +27,11 @@ config = ConfigObj('config.ini')
 traded_symbol_set = set(config["general"]["traded_symbols"].split(','))
 min_no_of_avb_sym = int(config["general"]["min_no_of_avb_sym"])
 rebalance_interval = int(config["general"]["rebalance_interval"])
-granularity = int(config["general"]["granularity"])
+N = int(config["general"]["granularity"])
 max_weight_dict = config["max_weight"]
 
 her = config["general"]["hsi_expected_return"]
-hsi_expected_return_list = map(lambda y: (datetime.strptime(y[1],"%Y-%m-%d").date(),float(y[2])), filter(lambda x: x[0]%2==0, zip(range(len(her)-1),her[:-1],her[1:])))
+hsi_expected_return_list = sorted(map(lambda y: (datetime.strptime(y[1],"%Y-%m-%d").date(),float(y[2])), filter(lambda x: x[0]%2==0, zip(range(len(her)-1),her[:-1],her[1:]))), key=lambda x: x[0])
 hsi_hhi_constituents_list = map(lambda x: (x[0],datetime.strptime(x[1],"%Y-%m-%d").date(),datetime.strptime(x[2],"%Y-%m-%d").date()), read_file(config["general"]["hsi_hhi_constituents"]))
 
 ###################################################
@@ -79,12 +79,57 @@ for dt in rebalance_date_list:
     ###################################################
 
     optimal_soln_list = []
-    sol_list = log_optimal_growth(symbol_list, expected_rtn_list, cov_matrix, max_weight_list)
+    ###################################################
+    log_optimal_sol_list = log_optimal_growth(symbol_list, expected_rtn_list, cov_matrix, max_weight_list)
 
-    if sol_list is None:
+    if log_optimal_sol_list is None:
         continue
+    log_optimal_sol_list = list(log_optimal_sol_list["result"]['x'])
 
-    sol_list = list(sol_list["result"]['x'])
+    ###################################################
+    markowitz_sol_list = []
+    for i in range(N):
+        mu_p = from_tgt_rtn + (to_tgt_rtn - from_tgt_rtn) * float(i)/float(N)
+        tmp_sol_list = markowitz(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list)
+
+        if tmp_sol_list is None:
+            continue
+        tmp_sol_list = list(tmp_sol_list["result"]['x'])
+
+        sol_vec = np.asarray(tmp_sol_list)
+        sol_vec_T = np.matrix(sol_vec).T
+        frontier_port_exp_rtn = float(np.asarray(expected_rtn_list) * sol_vec_T)
+        frontier_port_stdev = math.sqrt(float((sol_vec * cov_matrix) * sol_vec_T))
+        frontier_port_sharpe_ratio = float(frontier_port_exp_rtn / frontier_port_stdev)
+
+        if (len(markowitz_sol_list) == 0) or (frontier_port_sharpe_ratio < markowitz_sol_list[0]):
+            markowitz_sol_list = [frontier_port_sharpe_ratio, tmp_sol_list]
+    markowitz_sol_list = markowitz_sol_list[1]
+    ###################################################
+
+    hsi_expected_return = filter(lambda x: x[0] <= dt, hsi_expected_return_list)[-1][1]
+    if hsi_expected_return > 20:
+        log_optimal_weight = 1.0
+        markowitz_weight = 0.0
+    elif hsi_expected_return > 15:
+        log_optimal_weight = 0.75
+        markowitz_weight = 0.25
+    elif hsi_expected_return > 10:
+        log_optimal_weight = 0.5
+        markowitz_weight = 0.5
+    elif hsi_expected_return < 0:
+        log_optimal_weight = 0.0
+        markowitz_weight = 0.0
+    elif hsi_expected_return < 5:
+        log_optimal_weight = 0.0
+        markowitz_weight = 1.0
+    elif hsi_expected_return < 10:
+        log_optimal_weight = 0.25
+        markowitz_weight = 0.75
+
+    sol_list = map(sum, zip(map(lambda x: x * markowitz_weight, markowitz_sol_list), map(lambda x: x * log_optimal_weight, log_optimal_sol_list)))
+    ###################################################
+
     sym_weight_dict = dict(zip(symbol_list,map(lambda w: str(round(w,5)), sol_list)))
     sym_px_weight_list = map(lambda s: (s,str(hist_adj_px_dict[dt].get(s,0.0)),str(sym_weight_dict.get(s,0.0))), sorted(list(traded_symbol_set)))
 
@@ -102,5 +147,5 @@ for dt in rebalance_date_list:
     ###################################################
     pos_dict = dict([(s,cash*float(w)/hist_adj_px_dict[dt][s]) for s,w in sym_weight_dict.items()])
     # print "mkt val of pos: %s" % sum([hist_adj_px_dict[dt][s]*pos for s,pos in pos_dict.items()])
-    cash = 0
+    cash -= float(sum([hist_adj_px_dict[dt].get(s,filter(lambda x: x[1]==s, hist_adj_px_list)[-1][2])*pos for s,pos in pos_dict.items()]))
     ###################################################

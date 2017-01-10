@@ -75,7 +75,6 @@ print '\n'.join(map(lambda x: justify_str(x[0],8)+justify_str(x[1],10)+justify_s
 from_tgt_rtn = min(expected_rtn_list)
 to_tgt_rtn = max(expected_rtn_list)
 mu_sd_sharpe_soln_list = []
-N = 1000
 
 max_weight_dict = config["max_weight"]
 max_weight_list = map(lambda x: float(max_weight_dict.get(x,1.0)), symbol_list)
@@ -83,6 +82,8 @@ max_weight_list = map(lambda x: float(max_weight_dict.get(x,1.0)), symbol_list)
 # print "expected_rtn_list: %s" % (expected_rtn_list)
 # print "cov_matrix: %s" % (cov_matrix)
 # print "max_weight_list: %s" % (max_weight_list)
+
+N = int(config["general"]["granularity"])
 
 if config["general"]["markowitz"].lower() == "true":
     for i in range(N):
