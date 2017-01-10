@@ -167,3 +167,61 @@ def markowitz(symbol_list,expected_rtn_list,cov_matrix,mu_p,max_weight_list,port
 
     return {'w': w, 'f': f, 'args': (P, q, G, h, A, b), 'result': sol }
 
+def log_optimal_growth(symbol_list,expected_rtn_list,cov_matrix,max_weight_list,portfolio_change_inertia=None,hatred_for_small_size=None,current_weight_list=None):
+    def iif(cond, iftrue=1.0, iffalse=0.0):
+        if cond:
+            return iftrue
+        else:
+            return iffalse
+
+    n = len(symbol_list)
+
+    ###################################################
+    # P and q determine the objective function to minimize
+    # which in cvxopt is defined as $.5 x^T P x + q^T x$
+    if portfolio_change_inertia is None or current_weight_list is None or hatred_for_small_size is None:
+        P = cvxopt.matrix(0.5 * cov_matrix)
+        q = cvxopt.matrix( map(lambda x: -x, expected_rtn_list))
+    else:
+        P = cvxopt.matrix(0.5 * cov_matrix + (portfolio_change_inertia - hatred_for_small_size) * np.identity(n))
+        negated_expected_rtn_list = map(lambda x: -x, expected_rtn_list)
+        penalty_list = map(lambda cw: (-2 * portfolio_change_inertia * cw) + (2 * hatred_for_small_size), current_weight_list)
+        q = cvxopt.matrix(map(lambda x: x[0]+x[1], zip(negated_expected_rtn_list,penalty_list)))
+
+    ###################################################
+    # G and h determine the inequality constraints in the
+    # form $G x \leq h$. We write $w_i \geq 0$ as $-1 \times x_i \leq 0$
+    # and also add a (superfluous) $x_i \leq 1$ constraint
+    ###################################################
+    # G x <= h
+    # -1  0  0  0 ... 0          0
+    #  1  0  0  0 ... 0          w_0
+    #  0 -1  0  0 ... 0          0
+    #  0  1  0  0 ... 0          w_1
+    #  0  0 -1  0 ... 0
+    #  0  0  1  0 ... 0
+    ###################################################
+    G = cvxopt.matrix([[ (-1.0)**(1+j%2) * iif(i == j/2) for i in range(n) ]
+                for j in range(2*n)
+                ]).trans()
+    h = cvxopt.matrix([ max_weight_list[j/2] * iif(j % 2) for j in range(2*n) ])
+    ###################################################
+
+    # A and b determine the equality constraints defined as A x = b
+    A = cvxopt.matrix([[ 1.0 for i in range(n) ]]).trans()
+    b = cvxopt.matrix([ 1.0 ])
+
+    solvers.options['show_progress'] = False
+    try:
+        sol = solvers.qp(P, q, G, h, A, b)
+    except:
+        return None
+
+    if sol['status'] != 'optimal':
+        return None
+
+    w = list(sol['x'])
+    f = 2.0*sol['primal objective']
+
+    return {'w': w, 'f': f, 'args': (P, q, G, h, A, b), 'result': sol }
+
