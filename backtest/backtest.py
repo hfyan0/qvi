@@ -9,7 +9,7 @@ from itertools import groupby
 
 import os
 sys.path.append(os.path.dirname(sys.path[0]))
-from mvo import calc_cov_matrix_annualized,conv_to_hkd,intWithCommas,justify_str,markowitz,read_file
+from mvo import calc_cov_matrix_annualized,conv_to_hkd,intWithCommas,justify_str,log_optimal_growth,read_file
 
 ###################################################
 def get_risk_aversion_factor(dt,hsi_expected_return_list):
@@ -79,50 +79,28 @@ for dt in rebalance_date_list:
     ###################################################
 
     optimal_soln_list = []
-    for i in range(granularity):
-        mu_p = from_tgt_rtn + (to_tgt_rtn - from_tgt_rtn) * float(i)/float(granularity)
-        sol_list = markowitz(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list)
+    sol_list = log_optimal_growth(symbol_list, expected_rtn_list, cov_matrix, max_weight_list)
 
-        if sol_list is None:
-            continue
+    if sol_list is None:
+        continue
 
-        sol_list = list(sol_list["result"]['x'])
+    sol_list = list(sol_list["result"]['x'])
+    sym_weight_dict = dict(zip(symbol_list,map(lambda w: str(round(w,5)), sol_list)))
+    sym_px_weight_list = map(lambda s: (s,str(hist_adj_px_dict[dt].get(s,0.0)),str(sym_weight_dict.get(s,0.0))), sorted(list(traded_symbol_set)))
 
-        sol_vec = np.asarray(sol_list)
-        sol_vec_T = np.matrix(sol_vec).T
+    ###################################################
+    # sell all pos
+    ###################################################
+    cash += float(sum([hist_adj_px_dict[dt].get(s,filter(lambda x: x[1]==s, hist_adj_px_list)[-1][2])*pos for s,pos in pos_dict.items()]))
+    pos_dict = {}
+    ###################################################
 
-        market_port_exp_rtn = float(np.asarray(expected_rtn_list) * sol_vec_T)
-        market_port_stdev = math.sqrt(float((sol_vec * cov_matrix) * sol_vec_T))
-        market_port_sharpe_ratio = float(market_port_exp_rtn / market_port_stdev)
-        market_port_kelly_f_true = float(market_port_exp_rtn / market_port_stdev / market_port_stdev)
-        market_port_kelly_f_for_ranking = min(market_port_kelly_f_true, get_risk_aversion_factor(dt,hsi_expected_return_list))
-        market_port_kelly_f = min(market_port_kelly_f_true, float(config["general"]["max_allowed_leverage"]))
+    print str(dt)+","+str(cash)+","+str(len(sym_weight_dict))+","+','.join(map(lambda x: ':'.join(x), sym_px_weight_list))
 
-        target_port_exp_rtn_aft_costs_for_ranking = (market_port_exp_rtn * market_port_kelly_f_for_ranking) - (max(market_port_kelly_f_for_ranking-1.0,0.0)*float(config["general"]["financing_cost"]))
-        sol_list = map(lambda x: x * market_port_kelly_f, sol_list)
-
-        if (len(optimal_soln_list) == 0) or (target_port_exp_rtn_aft_costs_for_ranking > optimal_soln_list[0]):
-            optimal_soln_list = []
-            optimal_soln_list.append(target_port_exp_rtn_aft_costs_for_ranking)
-            optimal_soln_list.append(sol_list)
-
-    if len(optimal_soln_list) > 0:
-        sym_weight_dict = dict(zip(symbol_list,map(lambda w: str(round(w,5)), optimal_soln_list[1])))
-        sym_px_weight_list = map(lambda s: (s,str(hist_adj_px_dict[dt].get(s,0.0)),str(sym_weight_dict.get(s,0.0))), sorted(list(traded_symbol_set)))
-
-        ###################################################
-        # sell all pos
-        ###################################################
-        cash += float(sum([hist_adj_px_dict[dt].get(s,filter(lambda x: x[1]==s, hist_adj_px_list)[-1][2])*pos for s,pos in pos_dict.items()]))
-        pos_dict = {}
-        ###################################################
-
-        print str(dt)+","+str(cash)+","+str(len(sym_weight_dict))+","+','.join(map(lambda x: ':'.join(x), sym_px_weight_list))
-
-        ###################################################
-        # buy back
-        ###################################################
-        pos_dict = dict([(s,cash*float(w)/hist_adj_px_dict[dt][s]) for s,w in sym_weight_dict.items()])
-        # print "mkt val of pos: %s" % sum([hist_adj_px_dict[dt][s]*pos for s,pos in pos_dict.items()])
-        cash = 0
-        ###################################################
+    ###################################################
+    # buy back
+    ###################################################
+    pos_dict = dict([(s,cash*float(w)/hist_adj_px_dict[dt][s]) for s,w in sym_weight_dict.items()])
+    # print "mkt val of pos: %s" % sum([hist_adj_px_dict[dt][s]*pos for s,pos in pos_dict.items()])
+    cash = 0
+    ###################################################
