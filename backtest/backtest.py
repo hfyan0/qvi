@@ -12,17 +12,6 @@ sys.path.append(os.path.dirname(sys.path[0]))
 from mvo import calc_cov_matrix_annualized,conv_to_hkd,intWithCommas,justify_str,markowitz,log_optimal_growth,read_file
 
 ###################################################
-def get_risk_aversion_factor(dt,hsi_expected_return_list):
-    # exp_rtn = filter(lambda x: x[0]<=dt, hsi_expected_return_list)[-1][1]
-    # risk_aversion_factor = max(min(10.0-exp_rtn,10.0),0.0)
-    # print "risk_aversion_factor: %s %s" % (dt,risk_aversion_factor)
-    # return risk_aversion_factor
-    ###################################################
-    # does not seem to affect the optimization when no risk free asset
-    ###################################################
-    return 1.0
-
-###################################################
 config = ConfigObj('config.ini')
 traded_symbol_set = set(config["general"]["traded_symbols"].split(','))
 min_no_of_avb_sym = int(config["general"]["min_no_of_avb_sym"])
@@ -56,6 +45,11 @@ rebalance_date_list = map(lambda y: y[1], filter(lambda x: x[0]%rebalance_interv
 pos_dict = {}
 cash = float(config["general"]["init_capital"])
 
+# ###################################################
+# mkt_timing_buy_lock  = False
+# mkt_timing_sell_lock = False
+# ###################################################
+
 ###################################################
 for dt in rebalance_date_list:
     avb_constituent_set = set(map(lambda x: x[0], filter(lambda z: dt<=z[2], filter(lambda y: y[1]<=dt, hsi_hhi_constituents_list))))
@@ -78,56 +72,101 @@ for dt in rebalance_date_list:
     cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(sym_time_series_list, specific_riskiness_list)
     ###################################################
 
-    optimal_soln_list = []
     ###################################################
     log_optimal_sol_list = log_optimal_growth(symbol_list, expected_rtn_list, cov_matrix, max_weight_list)
-
     if log_optimal_sol_list is None:
         continue
     log_optimal_sol_list = list(log_optimal_sol_list["result"]['x'])
-
     ###################################################
-    markowitz_sol_list = []
-    for i in range(N):
-        mu_p = from_tgt_rtn + (to_tgt_rtn - from_tgt_rtn) * float(i)/float(N)
-        tmp_sol_list = markowitz(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list)
 
-        if tmp_sol_list is None:
-            continue
-        tmp_sol_list = list(tmp_sol_list["result"]['x'])
-
-        sol_vec = np.asarray(tmp_sol_list)
-        sol_vec_T = np.matrix(sol_vec).T
-        frontier_port_exp_rtn = float(np.asarray(expected_rtn_list) * sol_vec_T)
-        frontier_port_stdev = math.sqrt(float((sol_vec * cov_matrix) * sol_vec_T))
-        frontier_port_sharpe_ratio = float(frontier_port_exp_rtn / frontier_port_stdev)
-
-        if (len(markowitz_sol_list) == 0) or (frontier_port_sharpe_ratio < markowitz_sol_list[0]):
-            markowitz_sol_list = [frontier_port_sharpe_ratio, tmp_sol_list]
-    markowitz_sol_list = markowitz_sol_list[1]
-    ###################################################
+    # ###################################################
+    # markowitz_max_sharpe_sol_list = []
+    # markowitz_max_return_sol_list = []
+    # for i in range(N):
+    #     mu_p = from_tgt_rtn + (to_tgt_rtn - from_tgt_rtn) * float(i)/float(N)
+    #     tmp_sol_list = markowitz(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list)
+    #
+    #     if tmp_sol_list is None:
+    #         continue
+    #     tmp_sol_list = list(tmp_sol_list["result"]['x'])
+    #
+    #     sol_vec = np.asarray(tmp_sol_list)
+    #     sol_vec_T = np.matrix(sol_vec).T
+    #
+    #     frontier_port_exp_rtn = float(np.asarray(expected_rtn_list) * sol_vec_T)
+    #     frontier_port_stdev = math.sqrt(float((sol_vec * cov_matrix) * sol_vec_T))
+    #     frontier_port_sharpe_ratio = float(frontier_port_exp_rtn / frontier_port_stdev)
+    #
+    #     frontier_port_kelly_f = float(frontier_port_exp_rtn / frontier_port_stdev / frontier_port_stdev)
+    #
+    #     if (len(markowitz_max_sharpe_sol_list) == 0) or (frontier_port_sharpe_ratio < markowitz_max_sharpe_sol_list[0]):
+    #         markowitz_max_sharpe_sol_list = [frontier_port_sharpe_ratio, tmp_sol_list]
+    #
+    #     # print "frontier_port_kelly_f: %s" % (frontier_port_kelly_f)
+    #     if len(markowitz_max_return_sol_list) == 0 or (frontier_port_kelly_f > markowitz_max_return_sol_list[0]):
+    #         markowitz_max_return_sol_list = [frontier_port_kelly_f, tmp_sol_list]
+    #
+    # markowitz_max_sharpe_sol_list = markowitz_max_sharpe_sol_list[1]
+    # markowitz_max_return_sol_list = markowitz_max_return_sol_list[1]
+    # ###################################################
 
     hsi_expected_return = filter(lambda x: x[0] <= dt, hsi_expected_return_list)[-1][1]
-    if hsi_expected_return > 20:
-        log_optimal_weight = 1.0
-        markowitz_weight = 0.0
-    elif hsi_expected_return > 15:
-        log_optimal_weight = 0.75
-        markowitz_weight = 0.25
-    elif hsi_expected_return > 10:
-        log_optimal_weight = 0.5
-        markowitz_weight = 0.5
-    elif hsi_expected_return < 0:
-        log_optimal_weight = 0.0
-        markowitz_weight = 0.0
-    elif hsi_expected_return < 5:
-        log_optimal_weight = 0.0
-        markowitz_weight = 1.0
-    elif hsi_expected_return < 10:
-        log_optimal_weight = 0.25
-        markowitz_weight = 0.75
+    # sol_list = markowitz_max_sharpe_sol_list
+    # sol_list = markowitz_max_return_sol_list
+    sol_list = log_optimal_sol_list
 
-    sol_list = map(sum, zip(map(lambda x: x * markowitz_weight, markowitz_sol_list), map(lambda x: x * log_optimal_weight, log_optimal_sol_list)))
+    ###################################################
+    # if hsi_expected_return > 15:
+    #     log_optimal_weight = 1.0
+    #     markowitz_weight = 0.0
+    # elif hsi_expected_return > 10:
+    #     log_optimal_weight = 0.75
+    #     markowitz_weight = 0.25
+    # elif hsi_expected_return < 0:
+    #     log_optimal_weight = 0.0
+    #     markowitz_weight = 0.0
+    # elif hsi_expected_return < 5:
+    #     log_optimal_weight = 0.0
+    #     markowitz_weight = 0.5
+    # elif hsi_expected_return < 7:
+    #     log_optimal_weight = 0.0
+    #     markowitz_weight = 1.0
+    # elif hsi_expected_return < 10:
+    #     log_optimal_weight = 0.5
+    #     markowitz_weight = 0.5
+    # sol_list = map(sum, zip(map(lambda x: x * markowitz_weight, markowitz_max_sharpe_sol_list), map(lambda x: x * log_optimal_weight, log_optimal_sol_list)))
+
+    # ###################################################
+    # if hsi_expected_return > 15:
+    #     mkt_timing_buy_lock  = False
+    #     mkt_timing_sell_lock = True
+    #     markowitz_max_return_weight = 1.0
+    #     markowitz_max_sharpe_weight = 0.0
+    # elif hsi_expected_return > 10:
+    #     mkt_timing_buy_lock  = False
+    #     mkt_timing_sell_lock = True
+    #     markowitz_max_return_weight = 0.75
+    #     markowitz_max_sharpe_weight = 0.25
+    # elif hsi_expected_return < 0:
+    #     mkt_timing_buy_lock  = True
+    #     mkt_timing_sell_lock = False
+    #     markowitz_max_return_weight = 0.0
+    #     markowitz_max_sharpe_weight = 0.0
+    # elif hsi_expected_return < 5:
+    #     mkt_timing_buy_lock  = True
+    #     mkt_timing_sell_lock = False
+    #     markowitz_max_return_weight = 0.0
+    #     markowitz_max_sharpe_weight = 0.5
+    # elif hsi_expected_return < 7:
+    #     if not mkt_timing_buy_lock and not mkt_timing_sell_lock:
+    #         markowitz_max_return_weight = 0.0
+    #         markowitz_max_sharpe_weight = 1.0
+    # elif hsi_expected_return < 10:
+    #     if not mkt_timing_buy_lock and not mkt_timing_sell_lock:
+    #         markowitz_max_return_weight = 0.5
+    #         markowitz_max_sharpe_weight = 0.5
+    # sol_list = map(sum, zip(map(lambda x: x * markowitz_max_sharpe_weight, markowitz_max_sharpe_sol_list), map(lambda x: x * markowitz_max_return_weight, markowitz_max_return_sol_list)))
+
     ###################################################
 
     sym_weight_dict = dict(zip(symbol_list,map(lambda w: str(round(w,5)), sol_list)))

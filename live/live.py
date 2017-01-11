@@ -132,7 +132,6 @@ if config["general"]["markowitz"].lower() == "true":
             mu_sd_sharpe_soln_list.append(sol_list)
 
 elif config["general"]["log_optimal_growth"].lower() == "true":
-
         sol_list = log_optimal_growth(symbol_list, expected_rtn_list, cov_matrix, max_weight_list, float(config["general"]["portfolio_change_inertia"]), float(config["general"]["hatred_for_small_size"]), current_weight_list)
 
         if sol_list is not None:
