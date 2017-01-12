@@ -102,7 +102,7 @@ for dt in rebalance_date_list:
             frontier_port_kelly_f = float(frontier_port_exp_rtn / frontier_port_stdev / frontier_port_stdev)
 
             # print "frontier_port_kelly_f: %s" % (frontier_port_kelly_f)
-            if (len(markowitz_max_sharpe_sol_list) == 0) or (frontier_port_sharpe_ratio < markowitz_max_sharpe_sol_list[0]):
+            if (len(markowitz_max_sharpe_sol_list) == 0) or (frontier_port_sharpe_ratio > markowitz_max_sharpe_sol_list[0]):
                 markowitz_max_sharpe_sol_list = [frontier_port_sharpe_ratio, tmp_sol_list]
 
             if len(markowitz_max_kelly_f_sol_list) == 0 or (frontier_port_kelly_f > markowitz_max_kelly_f_sol_list[0]):
