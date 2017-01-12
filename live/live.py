@@ -68,9 +68,9 @@ str_expected_rtn_list = map(lambda x: str(round(x,4)*100)+'%', expected_rtn_list
 str_annualized_sd_list = map(lambda x: str(round(x,4)*100)+'%', annualized_sd_list)
 str_annualized_adj_sd_list = map(lambda x: str(round(x,4)*100)+'%', annualized_adj_sd_list)
 str_sharpe_list = map(lambda x: str(round(x[0]/x[1],3)), zip(expected_rtn_list,annualized_adj_sd_list))
-print
-print "%s%s%s%s%s" % (justify_str("Symbol",8),justify_str("E[r]",10),justify_str("SD[r]",10),justify_str("SD_adj[r]",10),justify_str("Sharpe",10))
-print '\n'.join(map(lambda x: justify_str(x[0],8)+justify_str(x[1],10)+justify_str(x[2],10)+justify_str(x[3],10)+justify_str(x[4],10), zip(symbol_list,str_expected_rtn_list,str_annualized_sd_list,str_annualized_adj_sd_list,str_sharpe_list)))
+# print
+# print "%s%s%s%s%s" % (justify_str("Symbol",8),justify_str("E[r]",10),justify_str("SD[r]",10),justify_str("SD_adj[r]",10),justify_str("Sharpe",10))
+# print '\n'.join(map(lambda x: justify_str(x[0],8)+justify_str(x[1],10)+justify_str(x[2],10)+justify_str(x[3],10)+justify_str(x[4],10), zip(symbol_list,str_expected_rtn_list,str_annualized_sd_list,str_annualized_adj_sd_list,str_sharpe_list)))
 
 from_tgt_rtn = min(expected_rtn_list)
 to_tgt_rtn = max(expected_rtn_list)
@@ -84,16 +84,12 @@ max_weight_list = map(lambda x: float(max_weight_dict.get(x,1.0)), symbol_list)
 
 N = int(config["general"]["granularity"])
 
-
-
-
 ###################################################
 markowitz_max_sharpe_sol_list = []
 markowitz_max_kelly_f_sol_list = []
-if (config["general"]["construction_method"] == "markowitz_max_kelly_f") or (config["general"]["construction_method"] == "markowitz_max_sharpe"):
+if float(config["general"]["markowitz_max_kelly_f_weight"] > 0.0) or float(config["general"]["markowitz_max_sharpe_weight"] > 0.0):
     for i in range(N):
         mu_p = from_tgt_rtn + (to_tgt_rtn - from_tgt_rtn) * float(i)/float(N)
-        # tmp_sol_list = markowitz(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list)
         tmp_sol_list = markowitz(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list, float(config["general"]["portfolio_change_inertia"]), float(config["general"]["hatred_for_small_size"]), current_weight_list)
 
         if tmp_sol_list is None:
@@ -109,29 +105,16 @@ if (config["general"]["construction_method"] == "markowitz_max_kelly_f") or (con
         frontier_port_kelly_f = float(frontier_port_exp_rtn / frontier_port_stdev / frontier_port_stdev)
         frontier_port_exp_dollar_rtn_list = map(lambda x: x[0]*x[1]*float(config["general"]["capital"]), zip(tmp_sol_list,expected_rtn_list))
 
-        if (len(markowitz_max_sharpe_sol_list) == 0) or (frontier_port_sharpe_ratio > markowitz_max_sharpe_sol_list[2]):
-            markowitz_max_sharpe_sol_list = []
-            markowitz_max_sharpe_sol_list.append(float(frontier_port_exp_rtn))
-            markowitz_max_sharpe_sol_list.append(float(frontier_port_stdev))
-            markowitz_max_sharpe_sol_list.append(float(frontier_port_sharpe_ratio))
-            markowitz_max_sharpe_sol_list.append(float(frontier_port_kelly_f))
-            markowitz_max_sharpe_sol_list.append(frontier_port_exp_dollar_rtn_list)
-            markowitz_max_sharpe_sol_list.append(tmp_sol_list)
+        if (len(markowitz_max_sharpe_sol_list) == 0) or (frontier_port_sharpe_ratio > markowitz_max_sharpe_sol_list[0]):
+            markowitz_max_sharpe_sol_list = [frontier_port_sharpe_ratio,tmp_sol_list]
 
-        if len(markowitz_max_kelly_f_sol_list) == 0 or (frontier_port_kelly_f > markowitz_max_kelly_f_sol_list[3]):
-            markowitz_max_kelly_f_sol_list = []
-            markowitz_max_kelly_f_sol_list.append(float(frontier_port_exp_rtn))
-            markowitz_max_kelly_f_sol_list.append(float(frontier_port_stdev))
-            markowitz_max_kelly_f_sol_list.append(float(frontier_port_sharpe_ratio))
-            markowitz_max_kelly_f_sol_list.append(float(frontier_port_kelly_f))
-            markowitz_max_kelly_f_sol_list.append(frontier_port_exp_dollar_rtn_list)
-            markowitz_max_kelly_f_sol_list.append(tmp_sol_list)
+        if len(markowitz_max_kelly_f_sol_list) == 0 or (frontier_port_kelly_f > markowitz_max_kelly_f_sol_list[0]):
+            markowitz_max_kelly_f_sol_list = [frontier_port_kelly_f,tmp_sol_list]
 ###################################################
 
 ###################################################
 log_optimal_sol_list = []
-if config["general"]["construction_method"] == "log_optimal_growth":
-    # tmp_sol_list = log_optimal_growth(symbol_list, expected_rtn_list, cov_matrix, max_weight_list)
+if float(config["general"]["log_optimal_growth_weight"]) > 0.0:
     tmp_sol_list = log_optimal_growth(symbol_list, expected_rtn_list, cov_matrix, max_weight_list, float(config["general"]["portfolio_change_inertia"]), float(config["general"]["hatred_for_small_size"]), current_weight_list)
     if tmp_sol_list is None:
         print "Failed to find solution."
@@ -141,43 +124,38 @@ if config["general"]["construction_method"] == "log_optimal_growth":
     sol_vec = np.asarray(tmp_sol_list)
     sol_vec_T = np.matrix(sol_vec).T
 
-    frontier_port_exp_dollar_rtn_list = map(lambda x: x[0]*x[1]*float(config["general"]["capital"]), zip(tmp_sol_list,expected_rtn_list))
-    frontier_port_exp_rtn = float(np.asarray(expected_rtn_list) * sol_vec_T)
-    frontier_port_stdev = math.sqrt(float((sol_vec * cov_matrix) * sol_vec_T))
-    frontier_port_sharpe_ratio = float(frontier_port_exp_rtn / frontier_port_stdev)
-    frontier_port_kelly_f = float(frontier_port_exp_rtn / frontier_port_stdev / frontier_port_stdev)
-
-    log_optimal_sol_list = []
-    log_optimal_sol_list.append(float(frontier_port_exp_rtn))
-    log_optimal_sol_list.append(float(frontier_port_stdev))
-    log_optimal_sol_list.append(float(frontier_port_sharpe_ratio))
-    log_optimal_sol_list.append(float(frontier_port_kelly_f))
-    log_optimal_sol_list.append(frontier_port_exp_dollar_rtn_list)
-    log_optimal_sol_list.append(tmp_sol_list)
+    log_optimal_sol_list = tmp_sol_list
 ###################################################
 
-
 ###################################################
-if config["general"]["construction_method"] == "log_optimal_growth":
-    sol_list = log_optimal_sol_list
-elif config["general"]["construction_method"] == "markowitz_max_kelly_f":
-    sol_list = markowitz_max_kelly_f_sol_list
-elif config["general"]["construction_method"] == "markowitz_max_sharpe":
-    sol_list = markowitz_max_sharpe_sol_list
+sol_list = len(symbol_list) * [0.0]
+if float(config["general"]["log_optimal_growth_weight"]) > 0.0:
+    sol_list = map(sum, zip(sol_list,map(lambda x: x * float(config["general"]["log_optimal_growth_weight"]), log_optimal_sol_list)))
+if float(config["general"]["markowitz_max_kelly_f_weight"]) > 0.0:
+    sol_list = map(sum, zip(sol_list,map(lambda x: x * float(config["general"]["markowitz_max_kelly_f_weight"]), markowitz_max_kelly_f_sol_list[1])))
+if float(config["general"]["markowitz_max_sharpe_weight"]) > 0.0:
+    sol_list = map(sum, zip(sol_list,map(lambda x: x * float(config["general"]["markowitz_max_sharpe_weight"]), markowitz_max_sharpe_sol_list[1])))
 ###################################################
 
+sol_vec = np.asarray(sol_list)
+sol_vec_T = np.matrix(sol_vec).T
+target_port_exp_rtn = float(np.asarray(expected_rtn_list) * sol_vec_T)
+target_port_stdev = math.sqrt(float((sol_vec * cov_matrix) * sol_vec_T))
+target_port_sharpe_ratio = float(target_port_exp_rtn / target_port_stdev)
+target_port_kelly_f = float(target_port_exp_rtn / target_port_stdev / target_port_stdev)
+target_port_exp_dollar_rtn_list = map(lambda x: x[0]*x[1]*float(config["general"]["capital"]), zip(sol_list,expected_rtn_list))
 
 
 ###################################################
-frontier_port_exp_rtn, frontier_port_stdev, frontier_port_sharpe_ratio, frontier_port_kelly_f, frontier_port_exp_dollar_rtn_list, sol_list = tuple(sol_list)
 print
-print "Target portfolio:  E[r] = %s stdev = %s Sharpe ratio = %s Kelly f* = %s" % (str(round(frontier_port_exp_rtn*100, 3)) + " %", str(round(frontier_port_stdev*100,3)) + " %", round(frontier_port_sharpe_ratio,3), str(round(frontier_port_kelly_f,3)))
+print 100 * "-"
+print "Target portfolio:  E[r] = %s stdev = %s Sharpe ratio = %s Kelly f* = %s" % (str(round(target_port_exp_rtn*100, 3)) + " %", str(round(target_port_stdev*100,3)) + " %", round(target_port_sharpe_ratio,3), str(round(target_port_kelly_f,3)))
 
 ###################################################
 # target return
 ###################################################
-print "Target portfolio:  Expected return for 1 year: HKD %s" % (intWithCommas(int(sum(frontier_port_exp_dollar_rtn_list))))
-# print '\n'.join(map(lambda x: justify_str(x[0],7) + ":  HKD " + justify_str(intWithCommas(int(x[1])),8), filter(lambda y: abs(y[1]) > 1 , sorted(zip(symbol_list,frontier_port_exp_dollar_rtn_list), key=lambda tup: tup[1], reverse=True))))
+print "Target portfolio:  Expected return for 1 year: HKD %s" % (intWithCommas(int(sum(target_port_exp_dollar_rtn_list))))
+# print '\n'.join(map(lambda x: justify_str(x[0],7) + ":  HKD " + justify_str(intWithCommas(int(x[1])),8), filter(lambda y: abs(y[1]) > 1 , sorted(zip(symbol_list,target_port_exp_dollar_rtn_list), key=lambda tup: tup[1], reverse=True))))
 
 ###################################################
 sym_sol_list = filter(lambda x: abs(x[1]) > 0.001, zip(symbol_list,sol_list))
@@ -192,7 +170,7 @@ if len(current_pos_list) > 0:
     current_port_exp_dollar_rtn_list = map(lambda s: (s,int(expected_rtn_dict[s] * current_mkt_val_dict[s])), current_mkt_val_dict.keys())
     print "Current portfolio: E[r] = %s stdev = %s Sharpe ratio = %s Kelly f* = %s" % (str(round(cur_port_exp_rtn*100, 3)) + " %", str(round(cur_port_stdev*100,3)) + " %", round(cur_port_sharpe_ratio,3), round(cur_port_exp_rtn/cur_port_stdev/cur_port_stdev,3))
 
-print "Target portfolio:  Market value: HKD %s" % (justify_str(intWithCommas(int(float(config["general"]["capital"])*frontier_port_kelly_f)),11))
+print "Target portfolio:  Market value: HKD %s" % (justify_str(intWithCommas(int(float(config["general"]["capital"]))),11))
 if len(current_pos_list) > 0:
     print "Current portfolio: Market value: HKD %s" % (justify_str(intWithCommas(int(sum(current_mkt_val_dict.values()))),11))
     print "Current portfolio: Expected return for 1 year: HKD %s" % (intWithCommas(int(sum(map(lambda x: x[1], current_port_exp_dollar_rtn_list)))))
@@ -201,7 +179,7 @@ if len(current_pos_list) > 0:
 ###################################################
 # solution
 ###################################################
-header = "   Symbol:      Price         E[r] %           %     Amount (HKD)  |      Current  |         Diff"
+header = "   Symbol:      Price         E[r] %           %     Amount (HKD)  |      Current  |         Diff  |  Symbol"
 columns = []
 columns.append(map(lambda x: justify_str(x[0],9), sym_sol_list))
 columns.append(map(lambda x: ": ", sym_sol_list))
@@ -216,8 +194,10 @@ columns.append(map(lambda x: "  | $ ", sym_sol_list))
 columns.append(map(lambda x: justify_str(intWithCommas(int(current_mkt_val_dict.get(x[0],0))),10), sym_sol_list))
 columns.append(map(lambda x: "  | $ ", sym_sol_list))
 columns.append(map(lambda x: justify_str(intWithCommas(int(x[1] * float(config["general"]["capital"]) - current_mkt_val_dict.get(x[0],0))),10), sym_sol_list))
+columns.append(map(lambda x: "  | ", sym_sol_list))
+columns.append(map(lambda x: justify_str(x[0],5), sym_sol_list))
 print
 print "Target portfolio:"
 
-targetportdetails_list=[header]+map(lambda x: ''.join(x), zip(columns[0],columns[1],columns[2],columns[3],columns[4],columns[5],columns[6],columns[7],columns[8],columns[9],columns[10],columns[11],columns[12]))
+targetportdetails_list=[header]+map(lambda x: ''.join(x), zip(columns[0],columns[1],columns[2],columns[3],columns[4],columns[5],columns[6],columns[7],columns[8],columns[9],columns[10],columns[11],columns[12],columns[13],columns[14]))
 print '\n'.join(map(lambda x: justify_str(x[0],5)+")"+x[1], enumerate(targetportdetails_list)))

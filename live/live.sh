@@ -12,7 +12,7 @@ LIVE_FOLDER="$HOME/Dropbox/nirvana/mvo/live/"
 if [[ $1 == 'p' ]]
 then
     cd $LIVE_FOLDER
-    cat config_actual.ini > config.ini
+    cat config_sunny.ini > config.ini
     cat current_positions_sunny.csv > current_positions.csv
 
     cd $HOME_FOLDER/tools
@@ -27,7 +27,7 @@ else
     cd $LIVE_FOLDER
     cat current_prices_*.csv > current_prices.csv
     cat current_positions_sunny.csv > current_positions.csv
-    cat config_actual.ini > config.ini
+    cat config_sunny.ini > config.ini
     cd $HOME_FOLDER/tools
     ./add_current_px_manually.sh
 fi
