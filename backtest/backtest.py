@@ -158,7 +158,7 @@ for dt in rebalance_date_list:
     ###################################################
     most_correlated_idx_idx = sorted(enumerate(port_beta_list), key=lambda x: x[1])[-1][0]
     most_correlated_idx_sym = hedging_symbol_list[most_correlated_idx_idx]
-    pos_dict[most_correlated_idx_sym] = -port_beta_list[most_correlated_idx_idx] * capital_to_use / hist_adj_px_dict[dt][most_correlated_idx_sym]
+    pos_dict[most_correlated_idx_sym] = -port_beta_list[most_correlated_idx_idx] * capital_to_use / hist_adj_px_dict[dt][most_correlated_idx_sym] * float(config["general"]["hedge_fraction"])
     ###################################################
     # print "mkt val of pos: %s" % sum([hist_adj_px_dict[dt][s]*pos for s,pos in pos_dict.items()])
     print str(dt)+","+str(cash)+","+','.join(map(str, port_beta_list))+","+most_correlated_idx_sym+","+str(len(sym_weight_dict))+","+','.join(map(lambda x: ':'.join(x), sym_px_weight_list))+','+",".join(map(lambda x: "pos_"+x[0]+'_'+str(x[1]), pos_dict.items()))

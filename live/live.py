@@ -12,32 +12,25 @@ from mvo import calc_cov_matrix_annualized,conv_to_hkd,intWithCommas,justify_str
 ###################################################
 config = ConfigObj('config.ini')
 
-symbol_list = sorted([i for k in map(lambda x: config["general"][x].split(','), filter(lambda x: "traded_symbols" in x, config["general"].keys())) for i in k])
-# print "Symbols: %s" % (','.join(symbol_list))
-
-specific_riskiness_list = map(lambda s: float(config["specific_riskiness"].get(s,0)), symbol_list)
-# print "Riskiness: %s" % (','.join(map(str, specific_riskiness_list)))
+symbol_list = sorted([ i for k in map(lambda x: config["general"][x] if isinstance(config["general"][x], (list, tuple)) else [config["general"][x]], filter(lambda x: "traded_symbols" in x, config["general"].keys())) for i in k ])
+hedging_symbol_list = config["general"]["hedging_symbols"]
+specific_riskiness_list = len(hedging_symbol_list) * [0.0] + map(lambda s: float(config["specific_riskiness"].get(s,0)), symbol_list)
 
 ###################################################
 # read time series of prices
 ###################################################
-sym_data_list = map(lambda s: read_file(config["data_path"][s]), symbol_list)
+sym_data_list = map(lambda s: read_file(config["data_path"][s]), hedging_symbol_list+symbol_list)
 sym_data_list = map(lambda x: filter(lambda y: len(y) > 5, x), sym_data_list)
 sym_time_series_list = map(lambda data_list: map(lambda csv_fields: (datetime.strptime(csv_fields[0],"%Y-%m-%d"),float(csv_fields[5])), data_list), sym_data_list)
 
 expected_rtn_dict = dict(map(lambda x: (x[0],float(x[1])), read_file(config["general"]["expected_return_file"])))
-expected_rtn_list = map(lambda x: expected_rtn_dict.get(x,0), symbol_list)
+expected_rtn_list = map(lambda s: expected_rtn_dict.get(s,0.0), symbol_list)
 
-cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(sym_time_series_list, specific_riskiness_list)
-
-###################################################
-# inclusion of cash
-###################################################
-# symbol_list.append("Cash")    
-# expected_rtn_list.append(0.0)    
-# cov_matrix = np.column_stack([cov_matrix, np.zeros(cov_matrix.shape[0])])
-# newrow = np.transpose(np.asarray(map(lambda x: 0.0, range(len(symbol_list)))))
-# cov_matrix = np.vstack([cov_matrix, newrow])
+aug_cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(sym_time_series_list, specific_riskiness_list)
+cov_matrix = aug_cov_matrix
+for i in range(len(hedging_symbol_list)):
+    cov_matrix = np.delete(cov_matrix, 0, 0)
+    cov_matrix = np.delete(cov_matrix, 0, 1)
 
 ###################################################
 # current positions
@@ -57,8 +50,6 @@ if len(current_pos_list) > 0:
     cur_port_sharpe_ratio = float(cur_port_exp_rtn / cur_port_stdev) if abs(cur_port_stdev) > 0.0001 else 0.0
 ###################################################
 
-
-
 if (config["general"]["printCovMatrix"].lower() == "true"):
     print
     print "cov_matrix"
@@ -77,10 +68,6 @@ to_tgt_rtn = max(expected_rtn_list)
 
 max_weight_dict = config["max_weight"]
 max_weight_list = map(lambda x: float(max_weight_dict.get(x,1.0)), symbol_list)
-
-# print "expected_rtn_list: %s" % (expected_rtn_list)
-# print "cov_matrix: %s" % (cov_matrix)
-# print "max_weight_list: %s" % (max_weight_list)
 
 N = int(config["general"]["granularity"])
 
@@ -175,6 +162,17 @@ if len(current_pos_list) > 0:
     print "Current portfolio: Market value: HKD %s" % (justify_str(intWithCommas(int(sum(current_mkt_val_dict.values()))),11))
     print "Current portfolio: Expected return for 1 year: HKD %s" % (intWithCommas(int(sum(map(lambda x: x[1], current_port_exp_dollar_rtn_list)))))
     # print '\n'.join(map(lambda x: justify_str(x[0],7) + ":  HKD " + justify_str(intWithCommas(x[1]),8), sorted(current_port_exp_dollar_rtn_list, key=lambda tup: tup[1], reverse=True)))
+
+###################################################
+# beta
+###################################################
+aug_sol_list = len(hedging_symbol_list)*[0.0]+sol_list
+sol_port_beta_list = map(lambda h: sum(map(lambda x: x[0]*x[1]/aug_cov_matrix.tolist()[h[0]][h[0]], zip(aug_cov_matrix.tolist()[h[0]],aug_sol_list))), enumerate(hedging_symbol_list))
+print "Target  portfolio: beta: " + '  '.join(map(lambda x: hedging_symbol_list[x[0]]+": "+str(round(x[1],3)), enumerate(sol_port_beta_list)))
+
+aug_current_weight_list = len(hedging_symbol_list)*[0.0]+current_weight_list
+current_port_beta_list = map(lambda h: sum(map(lambda x: x[0]*x[1]/aug_cov_matrix.tolist()[h[0]][h[0]], zip(aug_cov_matrix.tolist()[h[0]],aug_current_weight_list))), enumerate(hedging_symbol_list))
+print "Current portfolio: beta: " + '  '.join(map(lambda x: hedging_symbol_list[x[0]]+": "+str(round(x[1],3)), enumerate(current_port_beta_list)))
 
 ###################################################
 # solution

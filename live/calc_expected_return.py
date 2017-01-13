@@ -40,7 +40,7 @@ stamp_duty_rate_dict = dict([(k,float(v)) for k,v in config["stamp_duty_rate"].i
 fund_expense_ratio_dict = dict([(k,float(v)) for k,v in config["fund_expense_ratio"].items()])
 expected_bond_px_rtn_dict = dict([(k,float(v)) for k,v in config["expected_bond_price_return"].items()])
 
-traded_symbol_list = sorted([i for k in map(lambda x: config["general"][x].split(','), filter(lambda x: "traded_symbols" in x, config["general"].keys())) for i in k])
+traded_symbol_list = sorted([ i for k in map(lambda x: config["general"][x] if isinstance(config["general"][x], (list, tuple)) else [config["general"][x]], filter(lambda x: "traded_symbols" in x, config["general"].keys())) for i in k ])
 sym_with_divd_yield = filter(lambda x: x in traded_symbol_list, divd_per_share_dict.keys())
 sym_divd_yield_dict = dict(map(lambda s: (s,(((divd_per_share_dict[s] * (1-divd_withholdg_tax_rate_dict.get(s,0.0))/cur_px_dict[s])) if divd_per_share_dict[s] > 0.0 else -fund_expense_ratio_dict.get(s,0.0)) + expected_bond_px_rtn_dict.get(s,0.0)), sym_with_divd_yield))
 
