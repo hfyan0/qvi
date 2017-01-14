@@ -7,10 +7,9 @@ from cvxopt import blas, solvers
 from datetime import datetime, timedelta
 
 ###################################################
-# FIXME
+# Most recent (for correl)
 ###################################################
-DEFAULT_CORREL = 0.6
-DEFAULT_SD = 0.5
+LOOKBACK_DAYS = 378
 ###################################################
 
 def conv_to_hkd(currency,amt):
@@ -49,28 +48,28 @@ def calc_return_list(price_list):
 
 def calc_correl(ts_a,ts_b):
     common_date_set = set(map(lambda x: x[0], ts_a)).intersection(set(map(lambda x: x[0], ts_b)))
-    a_ext = map(lambda x: x[1], filter(lambda x: x[0] in common_date_set, ts_a))
-    b_ext = map(lambda x: x[1], filter(lambda x: x[0] in common_date_set, ts_b))
-    if len(a_ext) <= 30 or len(b_ext) <= 30:
-        return DEFAULT_CORREL
+    a_ext = map(lambda x: x[1], filter(lambda x: x[0] in common_date_set, ts_a))[-LOOKBACK_DAYS:]
+    b_ext = map(lambda x: x[1], filter(lambda x: x[0] in common_date_set, ts_b))[-LOOKBACK_DAYS:]
+    if len(a_ext) < 30 or len(b_ext) < 30:
+        return -1
     else:
         return round(np.corrcoef(calc_return_list(a_ext),calc_return_list(b_ext))[0][1],5)
 
 def calc_var(ts):
-    r_ls = calc_return_list(ts)
+    r_ls = calc_return_list(ts)[-LOOKBACK_DAYS:]
     n = len(r_ls)
-    if n < 30:
-        return DEFAULT_SD*DEFAULT_SD
-    else:
-        m = float(sum(r_ls))/n
-        return sum(map(lambda x: math.pow(x-m,2), r_ls)) / float(n)
+    m = float(sum(r_ls))/n
+    return sum(map(lambda x: math.pow(x-m,2), r_ls)) / float(n)
 
 def calc_sd(ts):
-    return math.sqrt(calc_var(ts))
+    if len(ts) < 30:
+        return 9999.9
+    else:
+        return math.sqrt(calc_var(ts))
 
 def get_annualization_factor(date_list):
-    if len(date_list) < 10:
-        return 0
+    if len(date_list) < 30:
+        return 9999.9
     else:
         min_diff = min(map(lambda x: (x[0]-x[1]).days, zip(date_list[1:],date_list[:-1])))
         if min_diff == 1:
@@ -84,7 +83,15 @@ def calc_cov_matrix_annualized(sym_time_series_list, specific_riskiness_list):
     ###################################################
     # correlation matrix
     ###################################################
-    correl_matrix = map(lambda ts_x: map(lambda ts_y: calc_correl(ts_x,ts_y), sym_time_series_list), sym_time_series_list)
+    ij_correl_dict = dict((tuple(sorted([idx_i,idx_j])), calc_correl(sym_time_series_list[idx_i],sym_time_series_list[idx_j])) for idx_i in range(len(sym_time_series_list)) for idx_j in range(idx_i,len(sym_time_series_list)) )
+
+    correl_matrix = []
+    for idx_i in range(len(sym_time_series_list)):
+        row = []
+        for idx_j in range(len(sym_time_series_list)):
+            row.append(ij_correl_dict[ tuple(sorted([idx_i,idx_j])) ])
+        correl_matrix.append(row)
+
     correl_matrix = np.asmatrix(correl_matrix)
 
     np.set_printoptions(precision=5,suppress=True)
@@ -102,9 +109,12 @@ def calc_cov_matrix_annualized(sym_time_series_list, specific_riskiness_list):
     ###################################################
     sd_list = np.asarray(map(lambda ts: calc_sd(map(lambda x: x[1], ts)), sym_time_series_list))
     annualization_factor_list = (map(lambda ts: get_annualization_factor(map(lambda x: x[0], ts)), sym_time_series_list))
-    annualized_sd_list = map(lambda x: x[0]*math.sqrt(x[1]), zip(sd_list,annualization_factor_list))
+    annualized_sd_list = map(lambda x: x[0]*math.sqrt(x[1]), zip(sd_list.tolist(),annualization_factor_list))
     annualized_adj_sd_list = map(lambda x: x[0]+x[1], zip(annualized_sd_list,specific_riskiness_list))
     D = np.diag(annualized_adj_sd_list)
+    # print "D: %s" % str(D)
+    # print "correl_matrix: %s" % str(correl_matrix)
+    # print "cov_matrix: %s" % str(D*correl_matrix*D)
     return ((D * correl_matrix * D),annualized_sd_list,annualized_adj_sd_list)
 
 def calc_mean_vec(sym_time_series_list):

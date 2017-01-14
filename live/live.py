@@ -22,11 +22,17 @@ specific_riskiness_list = len(hedging_symbol_list) * [0.0] + map(lambda s: float
 sym_data_list = map(lambda s: read_file(config["data_path"][s]), hedging_symbol_list+symbol_list)
 sym_data_list = map(lambda x: filter(lambda y: len(y) > 5, x), sym_data_list)
 sym_time_series_list = map(lambda data_list: map(lambda csv_fields: (datetime.strptime(csv_fields[0],"%Y-%m-%d"),float(csv_fields[5])), data_list), sym_data_list)
+insufficient_data_list = map(lambda ss: ss[0]+": "+str(len(ss[1])), filter(lambda x: len(x[1])<50, zip(hedging_symbol_list+symbol_list,sym_time_series_list)))
+if len(insufficient_data_list) > 0:
+    print "Insufficient data:"
+    print '\n'.join(insufficient_data_list)
 
 expected_rtn_dict = dict(map(lambda x: (x[0],float(x[1])), read_file(config["general"]["expected_return_file"])))
 expected_rtn_list = map(lambda s: expected_rtn_dict.get(s,0.0), symbol_list)
 
 aug_cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(sym_time_series_list, specific_riskiness_list)
+print "Abnormal stdev to check:"
+print '\n'.join(map(lambda ss: ": ".join(map(str, ss)), filter(lambda x: (x[1] > 0.5) or (x[1] < 0.1), zip(hedging_symbol_list+symbol_list,annualized_sd_list))))
 cov_matrix = aug_cov_matrix
 for i in range(len(hedging_symbol_list)):
     cov_matrix = np.delete(cov_matrix, 0, 0)
@@ -159,32 +165,39 @@ if len(current_pos_list) > 0:
 
 print "Target portfolio:  Market value: HKD %s" % (justify_str(intWithCommas(int(float(config["general"]["capital"]))),11))
 if len(current_pos_list) > 0:
-    print "Current portfolio: Market value: HKD %s" % (justify_str(intWithCommas(int(sum(current_mkt_val_dict.values()))),11))
-    print "Current portfolio: Expected return for 1 year: HKD %s" % (intWithCommas(int(sum(map(lambda x: x[1], current_port_exp_dollar_rtn_list)))))
+    current_port_mkt_val = sum(current_mkt_val_dict.values())
+    print "Current portfolio: Market value: HKD %s" % (justify_str(intWithCommas(int(current_port_mkt_val)),11))
+    print "Current portfolio: Expected return in 1 year: HKD %s" % (intWithCommas(int(sum(map(lambda x: x[1], current_port_exp_dollar_rtn_list)))))
     # print '\n'.join(map(lambda x: justify_str(x[0],7) + ":  HKD " + justify_str(intWithCommas(x[1]),8), sorted(current_port_exp_dollar_rtn_list, key=lambda tup: tup[1], reverse=True)))
 
 ###################################################
 # beta
 ###################################################
+beta_dict_list = map(lambda h: dict(map(lambda x: (x[1],x[0]/aug_cov_matrix.tolist()[h[0]][h[0]]), zip(aug_cov_matrix.tolist()[h[0]],hedging_symbol_list+symbol_list))), enumerate(hedging_symbol_list))
+# print "Beta:"
+# print '\n'.join(map(lambda x: x[0]+": "+str(round(x[1],3)), sorted(beta_dict_list[0].items())))
+
 aug_sol_list = len(hedging_symbol_list)*[0.0]+sol_list
 sol_port_beta_list = map(lambda h: sum(map(lambda x: x[0]*x[1]/aug_cov_matrix.tolist()[h[0]][h[0]], zip(aug_cov_matrix.tolist()[h[0]],aug_sol_list))), enumerate(hedging_symbol_list))
-print "Target  portfolio: beta: " + '  '.join(map(lambda x: hedging_symbol_list[x[0]]+": "+str(round(x[1],3)), enumerate(sol_port_beta_list)))
+print "Target  portfolio: Beta: " + '  '.join(map(lambda x: hedging_symbol_list[x[0]]+": "+justify_str(str(round(x[1],3)),5)+" (Hedge notional: "+justify_str(intWithCommas(int(current_port_mkt_val*x[1])),9)+" )", enumerate(sol_port_beta_list)))
 
 aug_current_weight_list = len(hedging_symbol_list)*[0.0]+current_weight_list
 current_port_beta_list = map(lambda h: sum(map(lambda x: x[0]*x[1]/aug_cov_matrix.tolist()[h[0]][h[0]], zip(aug_cov_matrix.tolist()[h[0]],aug_current_weight_list))), enumerate(hedging_symbol_list))
-print "Current portfolio: beta: " + '  '.join(map(lambda x: hedging_symbol_list[x[0]]+": "+str(round(x[1],3)), enumerate(current_port_beta_list)))
+print "Current portfolio: Beta: " + '  '.join(map(lambda x: hedging_symbol_list[x[0]]+": "+justify_str(str(round(x[1],3)),5)+" (Hedge notional: "+justify_str(intWithCommas(int(current_port_mkt_val*x[1])),9)+" )", enumerate(current_port_beta_list)))
 
 ###################################################
 # solution
 ###################################################
-header = "   Symbol:      Price         E[r] %           %     Amount (HKD)  |      Current  |         Diff  |  Symbol"
+header = "   Symbol:      Price         E[r] %        Beta       w %     Amount (HKD)  |      Current  |         Diff  |  Symbol"
 columns = []
 columns.append(map(lambda x: justify_str(x[0],9), sym_sol_list))
 columns.append(map(lambda x: ": ", sym_sol_list))
 columns.append(map(lambda x: justify_str(cur_px_dict.get(x[0],"---"),10), sym_sol_list))
 columns.append(map(lambda x: "   ", sym_sol_list))
 columns.append(map(lambda x: justify_str(round(expected_rtn_dict[x[0]]*100,2),10), sym_sol_list))
-columns.append(map(lambda x: " %   ", sym_sol_list))
+columns.append(map(lambda x: " %    ", sym_sol_list))
+columns.append(map(lambda x: justify_str(round(beta_dict_list[0][x[0]],3),9), sym_sol_list))
+columns.append(map(lambda x: "", sym_sol_list))
 columns.append(map(lambda x: justify_str(round(x[1]*100,1),7), sym_sol_list))
 columns.append(map(lambda x: " %     $ ", sym_sol_list))
 columns.append(map(lambda x: justify_str(intWithCommas(int(x[1] * float(config["general"]["capital"]))),10), sym_sol_list))
@@ -197,5 +210,5 @@ columns.append(map(lambda x: justify_str(x[0],5), sym_sol_list))
 print
 print "Target portfolio:"
 
-targetportdetails_list=[header]+map(lambda x: ''.join(x), zip(columns[0],columns[1],columns[2],columns[3],columns[4],columns[5],columns[6],columns[7],columns[8],columns[9],columns[10],columns[11],columns[12],columns[13],columns[14]))
+targetportdetails_list=[header]+map(lambda x: ''.join(x), zip(columns[0],columns[1],columns[2],columns[3],columns[4],columns[5],columns[6],columns[7],columns[8],columns[9],columns[10],columns[11],columns[12],columns[13],columns[14],columns[15],columns[16]))
 print '\n'.join(map(lambda x: justify_str(x[0],5)+")"+x[1], enumerate(targetportdetails_list)))

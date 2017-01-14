@@ -114,6 +114,8 @@ for dt in rebalance_date_list:
             if len(markowitz_max_kelly_f_sol_list) == 0 or (frontier_port_kelly_f > markowitz_max_kelly_f_sol_list[0]):
                 markowitz_max_kelly_f_sol_list = [frontier_port_kelly_f, tmp_sol_list]
 
+        if (len(markowitz_max_sharpe_sol_list) == 0) or (len(markowitz_max_kelly_f_sol_list) == 0):
+            continue
         markowitz_max_sharpe_sol_list = markowitz_max_sharpe_sol_list[1]
         markowitz_max_kelly_f_sol_list = markowitz_max_kelly_f_sol_list[1]
     ###################################################
