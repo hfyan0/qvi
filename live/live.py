@@ -188,7 +188,7 @@ print "Current portfolio: Beta: " + '  '.join(map(lambda x: hedging_symbol_list[
 ###################################################
 # solution
 ###################################################
-header = "   Symbol:      Price         E[r] %        Beta       w %     Amount (HKD)  |      Current  |         Diff  |  Symbol"
+header = "   Symbol:      Price         E[r] %         Beta     Beta      w %     Amount (HKD)  |      Current  |         Diff  |  Symbol"
 columns = []
 columns.append(map(lambda x: justify_str(x[0],9), sym_sol_list))
 columns.append(map(lambda x: ": ", sym_sol_list))
@@ -197,6 +197,8 @@ columns.append(map(lambda x: "   ", sym_sol_list))
 columns.append(map(lambda x: justify_str(round(expected_rtn_dict[x[0]]*100,2),10), sym_sol_list))
 columns.append(map(lambda x: " %    ", sym_sol_list))
 columns.append(map(lambda x: justify_str(round(beta_dict_list[0][x[0]],3),9), sym_sol_list))
+columns.append(map(lambda x: "", sym_sol_list))
+columns.append(map(lambda x: justify_str(round(beta_dict_list[1][x[0]],3),9), sym_sol_list))
 columns.append(map(lambda x: "", sym_sol_list))
 columns.append(map(lambda x: justify_str(round(x[1]*100,1),7), sym_sol_list))
 columns.append(map(lambda x: " %     $ ", sym_sol_list))
@@ -210,5 +212,5 @@ columns.append(map(lambda x: justify_str(x[0],5), sym_sol_list))
 print
 print "Target portfolio:"
 
-targetportdetails_list=[header]+map(lambda x: ''.join(x), zip(columns[0],columns[1],columns[2],columns[3],columns[4],columns[5],columns[6],columns[7],columns[8],columns[9],columns[10],columns[11],columns[12],columns[13],columns[14],columns[15],columns[16]))
+targetportdetails_list=[header]+map(lambda x: ''.join(x), zip(columns[0],columns[1],columns[2],columns[3],columns[4],columns[5],columns[6],columns[7],columns[8],columns[9],columns[10],columns[11],columns[12],columns[13],columns[14],columns[15],columns[16],columns[17],columns[18]))
 print '\n'.join(map(lambda x: justify_str(x[0],5)+")"+x[1], enumerate(targetportdetails_list)))
