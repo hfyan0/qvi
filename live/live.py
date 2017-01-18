@@ -7,7 +7,7 @@ import numpy as np
 
 import os
 sys.path.append(os.path.dirname(sys.path[0]))
-from mvo import calc_cov_matrix_annualized,conv_to_hkd,intWithCommas,justify_str,markowitz,log_optimal_growth,read_file
+from mvo import calc_cov_matrix_annualized,conv_to_hkd,intWithCommas,justify_str,markowitz,markowitz_robust,log_optimal_growth,read_file
 
 ###################################################
 config = ConfigObj('config.ini')
@@ -29,6 +29,9 @@ if len(insufficient_data_list) > 0:
 
 expected_rtn_dict = dict(map(lambda x: (x[0],float(x[1])), read_file(config["general"]["expected_return_file"])))
 expected_rtn_list = map(lambda s: expected_rtn_dict.get(s,0.0), symbol_list)
+
+# expected_rtn_uncertainty_dict = config["expected_return_uncertainty"]
+# expected_rtn_uncertainty_list = map(lambda s: float(expected_rtn_uncertainty_dict[s]), symbol_list)
 
 aug_cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(sym_time_series_list, specific_riskiness_list)
 print "Abnormal stdev to check:"
@@ -84,6 +87,7 @@ if float(config["general"]["markowitz_max_kelly_f_weight"] > 0.0) or float(confi
     for i in range(N):
         mu_p = from_tgt_rtn + (to_tgt_rtn - from_tgt_rtn) * float(i)/float(N)
         tmp_sol_list = markowitz(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list, float(config["general"]["portfolio_change_inertia"]), float(config["general"]["hatred_for_small_size"]), current_weight_list)
+        # tmp_sol_list = markowitz_robust(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list, expected_rtn_uncertainty_list, float(config["general"]["portfolio_change_inertia"]), float(config["general"]["hatred_for_small_size"]), current_weight_list)
 
         if tmp_sol_list is None:
             continue

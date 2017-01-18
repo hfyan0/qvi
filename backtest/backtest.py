@@ -9,7 +9,7 @@ from itertools import groupby
 
 import os
 sys.path.append(os.path.dirname(sys.path[0]))
-from mvo import calc_cov_matrix_annualized,conv_to_hkd,intWithCommas,justify_str,markowitz,log_optimal_growth,read_file
+from mvo import calc_cov_matrix_annualized,conv_to_hkd,intWithCommas,justify_str,markowitz_robust,log_optimal_growth,read_file
 
 ###################################################
 config = ConfigObj('config.ini')
@@ -92,7 +92,7 @@ for dt in rebalance_date_list:
         markowitz_max_kelly_f_sol_list = []
         for i in range(N):
             mu_p = from_tgt_rtn + (to_tgt_rtn - from_tgt_rtn) * float(i)/float(N)
-            tmp_sol_list = markowitz(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list)
+            tmp_sol_list = markowitz_robust(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list)
 
             if tmp_sol_list is None:
                 continue

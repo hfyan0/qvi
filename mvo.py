@@ -5,6 +5,7 @@ import numpy as np
 import cvxopt
 from cvxopt import blas, solvers
 from datetime import datetime, timedelta
+import scipy.optimize
 
 ###################################################
 # Most recent (for correl)
@@ -234,4 +235,38 @@ def log_optimal_growth(symbol_list,expected_rtn_list,cov_matrix,max_weight_list,
     f = 2.0*sol['primal objective']
 
     return {'w': w, 'f': f, 'args': (P, q, G, h, A, b), 'result': sol }
+
+def markowitz_robust(symbol_list,expected_rtn_list,cov_matrix,mu_p,max_weight_list,expected_rtn_uncertainty_list,portfolio_change_inertia=None,hatred_for_small_size=None,current_weight_list=None):
+    n = len(symbol_list)
+    c_ = [{'type':'eq', 'fun': lambda w: sum(w)-1.0 }, {'type':'eq', 'fun': lambda w: sum([w_*r_ for w_,r_ in zip(w,expected_rtn_list)])-mu_p }]   # sum of weights = 100% and expected_rtn = mu
+    b_ = map(lambda x: (0.0, x), max_weight_list)  # upper and lower bounds of weights
+
+    def objective_func(w, cov_matrix, portfolio_change_inertia=None,hatred_for_small_size=None,current_weight_list=None):
+        w = np.asarray(w)
+        mu_uncertainty_matrix = np.diag(map(lambda x: math.pow(x/100.0,2), expected_rtn_uncertainty_list))
+        mu_robustness_penalty = 0.1 * math.sqrt((w * np.asmatrix(mu_uncertainty_matrix)).dot(w))
+
+        if portfolio_change_inertia is None or current_weight_list is None or hatred_for_small_size is None:
+            covar = (w * cov_matrix).dot(w)
+            return covar + mu_robustness_penalty
+        else:
+            mod_cov_matrix = 0.5 + cov_matrix + (portfolio_change_inertia - hatred_for_small_size) * np.identity(n)
+            quad_term = (w * mod_cov_matrix).dot(w)
+            print "quad: %s" % quad
+            lin_term = sum(map(lambda cur_w: ((-2 * portfolio_change_inertia * cw) + (2 * hatred_for_small_size)) * cur_w, current_weight_list))
+            print "lin_term: %s" % lin_term
+            return quad_term + lin_term + mu_robustness_penalty
+
+    ###################################################
+    w = np.ones([n])/n
+    try:
+        sol = scipy.optimize.minimize(objective_func, w, cov_matrix, method='SLSQP', constraints=c_, bounds=b_)  
+        # print "sol: %s" % sol
+    except:
+        return None
+
+    if not sol.success: 
+       return None
+    return {'result': {'x': list(sol.x)} }
+
 

@@ -54,6 +54,10 @@ def correct_scale2(f):
 def get_eps_from_roa(sym,sym_roa_dict,historical_noncurasset_src_dict,historical_curasset_src_dict,no_of_issued_shares):
     return map(lambda roa: correct_scale2(roa * (historical_noncurasset_src_dict[sym][-1]+historical_curasset_src_dict[sym][-1]) / no_of_issued_shares), sym_roa_dict[sym])
 
+def calc_sd(data_list):
+    m = sum(data_list) / len(data_list)
+    return math.sqrt(sum(map(lambda x: math.pow(x-m,2), data_list))/(len(data_list)-1))
+
 config = ConfigObj('config.ini')
 historical_earnings_src_dict = get_data_as_dict(config["general"]["historical_earnings_src"])
 historical_eps_src_dict = get_data_as_dict(config["general"]["historical_eps_src"])
@@ -68,6 +72,8 @@ else:
 sym_roa_list = map(lambda tup_list: map(lambda tup: correct_scale(tup[0]/(tup[1]+tup[2])), tup_list), map(lambda s: zip(historical_earnings_src_dict[s][1:],avg_asset(historical_noncurasset_src_dict[s]),avg_asset(historical_curasset_src_dict[s])), symbol_list))
 print "ROA (historical)"
 print '\n'.join(map(lambda x: justify_str(x[0],12)+":  "+justify_str('',15)+' '.join(map(lambda a: justify_str(a,15), map(lambda y: round(y*100,3), x[1])))+" (%)", zip(symbol_list,sym_roa_list)))
+print "ROA (historical) (stdev)"
+print '\n'.join(map(lambda x: justify_str(x[0],12)+":  "+justify_str('',15)+justify_str(round(calc_sd(x[1])*100,3),15)+" (%)", zip(symbol_list,sym_roa_list)))
 print "Total Asset"
 print '\n'.join(map(lambda s: justify_str(s,12)+": "+' '.join(map(lambda x: justify_str(float(x[0])+float(x[1]),15), zip(historical_noncurasset_src_dict[s],historical_curasset_src_dict[s]))), symbol_list))
 
