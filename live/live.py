@@ -179,11 +179,16 @@ beta_dict_list = map(lambda h: dict(map(lambda x: (x[1],x[0]/aug_cov_matrix.toli
 
 aug_sol_list = len(hedging_symbol_list)*[0.0]+sol_list
 sol_port_beta_list = map(lambda h: sum(map(lambda x: x[0]*x[1]/aug_cov_matrix.tolist()[h[0]][h[0]], zip(aug_cov_matrix.tolist()[h[0]],aug_sol_list))), enumerate(hedging_symbol_list))
-print "Target  portfolio: Beta: " + '  '.join(map(lambda x: hedging_symbol_list[x[0]]+": "+justify_str(str(round(x[1],3)),5)+" (Hedge notional: "+justify_str(intWithCommas(int(current_port_mkt_val*x[1])),9)+" )", enumerate(sol_port_beta_list)))
+print "Target  portfolio: Beta: " + '  '.join(map(lambda x: hedging_symbol_list[x[0]]+": "+justify_str(str(round(x[1],3)),5)+" (Beta hedge notional: "+justify_str(intWithCommas(int(current_port_mkt_val*x[1])),9)+" )", enumerate(sol_port_beta_list)))
 
 aug_current_weight_list = len(hedging_symbol_list)*[0.0]+current_weight_list
 current_port_beta_list = map(lambda h: sum(map(lambda x: x[0]*x[1]/aug_cov_matrix.tolist()[h[0]][h[0]], zip(aug_cov_matrix.tolist()[h[0]],aug_current_weight_list))), enumerate(hedging_symbol_list))
-print "Current portfolio: Beta: " + '  '.join(map(lambda x: hedging_symbol_list[x[0]]+": "+justify_str(str(round(x[1],3)),5)+" (Hedge notional: "+justify_str(intWithCommas(int(current_port_mkt_val*x[1])),9)+" )", enumerate(current_port_beta_list)))
+print "Current portfolio: Beta: " + '  '.join(map(lambda x: hedging_symbol_list[x[0]]+": "+justify_str(str(round(x[1],3)),5)+" (Beta hedge notional: "+justify_str(intWithCommas(int(current_port_mkt_val*x[1])),9)+" )", enumerate(current_port_beta_list)))
+
+
+hsi_expected_return = float(config["general"]["hsi_expected_return"])
+optimal_h_list = map(lambda x: (x[0],x[1]-(hsi_expected_return/0.7)), zip(hedging_symbol_list,current_port_beta_list))
+print "Target  portfolio: HSI expected return: " + str(round(hsi_expected_return*100.0,2)) + " %   " + '  '.join(map(lambda x: x[0] + ": " + str(round(x[1],5)) + " ( " + justify_str(intWithCommas(int(current_port_mkt_val*x[1])),9) + " ) ", optimal_h_list))
 
 ###################################################
 # solution

@@ -7,7 +7,7 @@ def read_file(file_loc):
 
 backtest_data=read_file(sys.argv[1])
 
-dt_sym_pos_dict = dict(map(lambda x: (x[0],dict(map(lambda s: (s.split(':')[0],float(s.split(':')[2])), filter(lambda x: "pos" not in x, x[6:])))), backtest_data))
+dt_sym_pos_dict = dict(map(lambda x: (x[0],dict(map(lambda s: (s.split(':')[0],float(s.split(':')[2])), filter(lambda x: "pos" not in x, x[7:])))), backtest_data))
 
 last = None
 for dt,sym_pos_dict in sorted(dt_sym_pos_dict.items(), key=lambda x: x[0]):

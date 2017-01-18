@@ -120,7 +120,6 @@ for dt in rebalance_date_list:
         markowitz_max_kelly_f_sol_list = markowitz_max_kelly_f_sol_list[1]
     ###################################################
 
-    hsi_expected_return = filter(lambda x: x[0] <= dt, hsi_expected_return_list)[-1][1]
     if config["general"]["construction_method"] == "log_optimal_growth":
         sol_list = log_optimal_sol_list
     elif config["general"]["construction_method"] == "markowitz_max_kelly_f":
@@ -156,13 +155,22 @@ for dt in rebalance_date_list:
     ###################################################
     pos_dict = dict([(s,capital_to_use*float(w)/hist_adj_px_dict[dt][s]) for s,w in sym_weight_dict.items()])
     ###################################################
-    # hedge with the most correlated index
+    # decide whether to hedge, and hedge with the most correlated index
     ###################################################
+    hsi_expected_return = filter(lambda x: x[0] <= dt, hsi_expected_return_list)[-1][1]
+    # if hsi_expected_return < 13.0 * 1.5:
+    #     most_correlated_idx_idx = sorted(enumerate(port_beta_list), key=lambda x: x[1])[-1][0]
+    #     most_correlated_idx_sym = hedging_symbol_list[most_correlated_idx_idx]
+    #     pos_dict[most_correlated_idx_sym] = -port_beta_list[most_correlated_idx_idx] * capital_to_use / hist_adj_px_dict[dt][most_correlated_idx_sym] * float(config["general"]["hedge_fraction"])
+    # else:
+    #     most_correlated_idx_idx = -1
+    #     most_correlated_idx_sym = "Nil"
     most_correlated_idx_idx = sorted(enumerate(port_beta_list), key=lambda x: x[1])[-1][0]
     most_correlated_idx_sym = hedging_symbol_list[most_correlated_idx_idx]
-    pos_dict[most_correlated_idx_sym] = -port_beta_list[most_correlated_idx_idx] * capital_to_use / hist_adj_px_dict[dt][most_correlated_idx_sym] * float(config["general"]["hedge_fraction"])
+    h = port_beta_list[most_correlated_idx_idx] - hsi_expected_return / 100.0 / 0.7
+    pos_dict[most_correlated_idx_sym] = -h * capital_to_use / hist_adj_px_dict[dt][most_correlated_idx_sym] * float(config["general"]["hedge_fraction"])
     ###################################################
     # print "mkt val of pos: %s" % sum([hist_adj_px_dict[dt][s]*pos for s,pos in pos_dict.items()])
-    print str(dt)+","+str(cash)+","+','.join(map(str, port_beta_list))+","+most_correlated_idx_sym+","+str(len(sym_weight_dict))+","+','.join(map(lambda x: ':'.join(x), sym_px_weight_list))+','+",".join(map(lambda x: "pos_"+x[0]+'_'+str(x[1]), pos_dict.items()))
+    print str(dt)+","+str(round(cash,0))+","+','.join(map(str,map(lambda x: round(x,5), port_beta_list)))+","+most_correlated_idx_sym+","+str(round(h,5))+","+str(len(sym_weight_dict))+","+','.join(map(lambda x: ':'.join(x), sym_px_weight_list))+','+",".join(map(lambda x: "pos_"+x[0]+'_'+str(x[1]), pos_dict.items()))
     cash -= float(sum([hist_adj_px_dict[dt].get(s,filter(lambda x: x[1]==s, hist_adj_px_list)[-1][2])*pos for s,pos in pos_dict.items()]))
     ###################################################
