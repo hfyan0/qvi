@@ -188,7 +188,7 @@ print "Current portfolio: Beta: " + '  '.join(map(lambda x: hedging_symbol_list[
 
 hsi_expected_return = float(config["general"]["hsi_expected_return"])
 optimal_h_list = map(lambda x: (x[0],x[1]-(hsi_expected_return/0.7)), zip(hedging_symbol_list,current_port_beta_list))
-print "Target  portfolio: HSI expected return: " + str(round(hsi_expected_return*100.0,2)) + " %   " + '  '.join(map(lambda x: x[0] + ": " + str(round(x[1],5)) + " ( " + justify_str(intWithCommas(int(current_port_mkt_val*x[1])),9) + " ) ", optimal_h_list))
+print "Current portfolio: HSI expected return: " + str(round(hsi_expected_return*100.0,2)) + " %   Optimal hedge:  " + '  '.join(map(lambda x: x[0] + ": " + str(round(x[1],5)) + " ( " + justify_str(intWithCommas(int(current_port_mkt_val*x[1])),9) + " ) ", optimal_h_list))
 
 ###################################################
 # solution
