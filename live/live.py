@@ -35,7 +35,7 @@ expected_rtn_list = map(lambda s: expected_rtn_dict.get(s,0.0), symbol_list)
 
 aug_cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(sym_time_series_list, specific_riskiness_list)
 print "Abnormal stdev to check:"
-print '\n'.join(map(lambda ss: ": ".join(map(str, ss)), filter(lambda x: (x[1] > 0.5) or (x[1] < 0.1), zip(hedging_symbol_list+symbol_list,annualized_sd_list))))
+print '\n'.join(map(lambda ss: ": ".join(map(str, ss)) + " %", filter(lambda x: (x[1] > 50.0) or (x[1] < 10.0), zip(hedging_symbol_list+symbol_list,map(lambda x: round(x*100.0,2), annualized_sd_list)))))
 cov_matrix = aug_cov_matrix
 for i in range(len(hedging_symbol_list)):
     cov_matrix = np.delete(cov_matrix, 0, 0)
@@ -157,7 +157,6 @@ print "Target portfolio:  Expected return for 1 year: HKD %s" % (intWithCommas(i
 ###################################################
 sym_sol_list = filter(lambda x: abs(x[1]) > 0.001, zip(symbol_list,sol_list))
 sym_sol_list.extend(map(lambda x: (x,0.0), filter(lambda k: k not in map(lambda y: y[0], sym_sol_list), current_mkt_val_dict.keys())))
-sym_sol_list = sorted(list(set(sym_sol_list)), reverse=True, key=lambda tup: tup[1])
 ###################################################
 
 ###################################################
@@ -193,6 +192,14 @@ print "Current portfolio: Beta: " + '  '.join(map(lambda x: hedging_symbol_list[
 hsi_expected_return = float(config["general"]["hsi_expected_return"])
 optimal_h_list = map(lambda x: (x[0],x[1]-(hsi_expected_return/0.7)), zip(hedging_symbol_list,current_port_beta_list))
 print "Current portfolio: HSI expected return: " + str(round(hsi_expected_return*100.0,2)) + " %   Optimal hedge:  " + '  '.join(map(lambda x: x[0] + ": " + str(round(x[1],5)) + " ( " + justify_str(intWithCommas(int(current_port_mkt_val*x[1])),9) + " ) ", optimal_h_list))
+
+
+###################################################
+# sorting of output list
+###################################################
+sym_sol_list = list(set(sym_sol_list))
+sym_sol_list_with_diff = map(lambda x: (x, x[1] * float(config["general"]["capital"]) - current_mkt_val_dict.get(x[0],0)), sym_sol_list)
+sym_sol_list = map(lambda x: x[0], sorted(sym_sol_list_with_diff, reverse=True, key=lambda tup: tup[1]))
 
 ###################################################
 # solution

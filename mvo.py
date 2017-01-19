@@ -121,6 +121,9 @@ def calc_cov_matrix_annualized(sym_time_series_list, specific_riskiness_list):
 def calc_mean_vec(sym_time_series_list):
     return map(lambda ts: sum(map(lambda x: x[1], ts))/len(ts), sym_time_series_list)
 
+def extract_sd_from_cov_matrix(cov_matrix):
+    return map(lambda x: math.sqrt(x), np.diag(cov_matrix).tolist())
+
 def markowitz(symbol_list,expected_rtn_list,cov_matrix,mu_p,max_weight_list,portfolio_change_inertia=None,hatred_for_small_size=None,current_weight_list=None):
     def iif(cond, iftrue=1.0, iffalse=0.0):
         if cond:
@@ -243,7 +246,7 @@ def markowitz_robust(symbol_list,expected_rtn_list,cov_matrix,mu_p,max_weight_li
 
     def objective_func(w, cov_matrix, portfolio_change_inertia=None,hatred_for_small_size=None,current_weight_list=None):
         w = np.asarray(w)
-        mu_uncertainty_matrix = np.diag(map(lambda x: math.pow(x/100.0,2), expected_rtn_uncertainty_list))
+        mu_uncertainty_matrix = np.diag(map(lambda x: math.pow(x,2), expected_rtn_uncertainty_list))
         mu_robustness_penalty = 0.1 * math.sqrt((w * np.asmatrix(mu_uncertainty_matrix)).dot(w))
 
         if portfolio_change_inertia is None or current_weight_list is None or hatred_for_small_size is None:

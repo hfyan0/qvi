@@ -9,7 +9,7 @@ from itertools import groupby
 
 import os
 sys.path.append(os.path.dirname(sys.path[0]))
-from mvo import calc_cov_matrix_annualized,conv_to_hkd,intWithCommas,justify_str,markowitz_robust,log_optimal_growth,read_file
+from mvo import calc_cov_matrix_annualized,conv_to_hkd,intWithCommas,justify_str,markowitz,markowitz_robust,log_optimal_growth,read_file,extract_sd_from_cov_matrix
 
 ###################################################
 config = ConfigObj('config.ini')
@@ -92,7 +92,10 @@ for dt in rebalance_date_list:
         markowitz_max_kelly_f_sol_list = []
         for i in range(N):
             mu_p = from_tgt_rtn + (to_tgt_rtn - from_tgt_rtn) * float(i)/float(N)
-            tmp_sol_list = markowitz_robust(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list)
+            if config["general"]["robust_optimization"].lower() == "true":
+                tmp_sol_list = markowitz_robust(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list, extract_sd_from_cov_matrix(cov_matrix))
+            else:
+                tmp_sol_list = markowitz(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list)
 
             if tmp_sol_list is None:
                 continue
@@ -146,8 +149,10 @@ for dt in rebalance_date_list:
     ###################################################
 
     ###################################################
-    # capital_to_use = cash
-    capital_to_use = float(config["general"]["init_capital"])
+    if config["general"]["constant_capital"].lower() == "true":
+        capital_to_use = float(config["general"]["init_capital"])
+    else:
+        capital_to_use = cash
     ###################################################
     
     ###################################################
@@ -158,17 +163,10 @@ for dt in rebalance_date_list:
     # decide whether to hedge, and hedge with the most correlated index
     ###################################################
     hsi_expected_return = filter(lambda x: x[0] <= dt, hsi_expected_return_list)[-1][1]
-    # if hsi_expected_return < 13.0 * 1.5:
-    #     most_correlated_idx_idx = sorted(enumerate(port_beta_list), key=lambda x: x[1])[-1][0]
-    #     most_correlated_idx_sym = hedging_symbol_list[most_correlated_idx_idx]
-    #     pos_dict[most_correlated_idx_sym] = -port_beta_list[most_correlated_idx_idx] * capital_to_use / hist_adj_px_dict[dt][most_correlated_idx_sym] * float(config["general"]["hedge_fraction"])
-    # else:
-    #     most_correlated_idx_idx = -1
-    #     most_correlated_idx_sym = "Nil"
     most_correlated_idx_idx = sorted(enumerate(port_beta_list), key=lambda x: x[1])[-1][0]
     most_correlated_idx_sym = hedging_symbol_list[most_correlated_idx_idx]
     h = port_beta_list[most_correlated_idx_idx] - hsi_expected_return / 100.0 / 0.7
-    pos_dict[most_correlated_idx_sym] = -h * capital_to_use / hist_adj_px_dict[dt][most_correlated_idx_sym] * float(config["general"]["hedge_fraction"])
+    pos_dict[most_correlated_idx_sym] = -h * capital_to_use / hist_adj_px_dict[dt][most_correlated_idx_sym]
     ###################################################
     # print "mkt val of pos: %s" % sum([hist_adj_px_dict[dt][s]*pos for s,pos in pos_dict.items()])
     print str(dt)+","+str(round(cash,0))+","+','.join(map(str,map(lambda x: round(x,5), port_beta_list)))+","+most_correlated_idx_sym+","+str(round(h,5))+","+str(len(sym_weight_dict))+","+','.join(map(lambda x: ':'.join(x), sym_px_weight_list))+','+",".join(map(lambda x: "pos_"+x[0]+'_'+str(x[1]), pos_dict.items()))
