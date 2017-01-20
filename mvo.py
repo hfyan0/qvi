@@ -124,7 +124,7 @@ def calc_mean_vec(sym_time_series_list):
 def extract_sd_from_cov_matrix(cov_matrix):
     return map(lambda x: math.sqrt(x), np.diag(cov_matrix).tolist())
 
-def markowitz(symbol_list,expected_rtn_list,cov_matrix,mu_p,max_weight_list,portfolio_change_inertia=None,hatred_for_small_size=None,current_weight_list=None):
+def markowitz(symbol_list,expected_rtn_list,cov_matrix,mu_p,max_weight_list,min_exp_rtn,portfolio_change_inertia=None,hatred_for_small_size=None,current_weight_list=None):
     def iif(cond, iftrue=1.0, iffalse=0.0):
         if cond:
             return iftrue
@@ -156,10 +156,17 @@ def markowitz(symbol_list,expected_rtn_list,cov_matrix,mu_p,max_weight_list,port
     #  0  0 -1  0 ... 0
     #  0  0  1  0 ... 0
     ###################################################
-    G = cvxopt.matrix([[ (-1.0)**(1+j%2) * iif(i == j/2) for i in range(n) ]
-                for j in range(2*n)
-                ]).trans()
-    h = cvxopt.matrix([ max_weight_list[j/2] * iif(j % 2) for j in range(2*n) ])
+    # G = cvxopt.matrix([
+    #             [ (-1.0)**(1+j%2) * iif(i == j/2) for i in range(n) ]
+    #             for j in range(2*n)
+    #             ]
+    #             ).trans()
+    # h = cvxopt.matrix([ max_weight_list[j/2] * iif(j % 2) for j in range(2*n) ])
+    G = cvxopt.matrix(
+                [ [ (-1.0 if (i==j) else 0.0) for i in range(n) ] for j in range(n) ] +
+                [ [ ( 1.0 if (i==j) else 0.0) for i in range(n) ] for j in range(n) ]
+                ).trans()
+    h = cvxopt.matrix( [ 0.0 for i in range(n) ] + [ 0.0 if expected_rtn_list[i] < min_exp_rtn else max_weight_list[i] for i in range(n) ] )
     ###################################################
 
     # A and b determine the equality constraints defined as A x = b

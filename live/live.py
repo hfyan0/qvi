@@ -86,7 +86,7 @@ markowitz_max_kelly_f_sol_list = []
 if float(config["general"]["markowitz_max_kelly_f_weight"] > 0.0) or float(config["general"]["markowitz_max_sharpe_weight"] > 0.0):
     for i in range(N):
         mu_p = from_tgt_rtn + (to_tgt_rtn - from_tgt_rtn) * float(i)/float(N)
-        tmp_sol_list = markowitz(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list, float(config["general"]["portfolio_change_inertia"]), float(config["general"]["hatred_for_small_size"]), current_weight_list)
+        tmp_sol_list = markowitz(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list, float(config["general"]["min_expected_return"]), float(config["general"]["portfolio_change_inertia"]), float(config["general"]["hatred_for_small_size"]), current_weight_list)
         # tmp_sol_list = markowitz_robust(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list, expected_rtn_uncertainty_list, float(config["general"]["portfolio_change_inertia"]), float(config["general"]["hatred_for_small_size"]), current_weight_list)
 
         if tmp_sol_list is None:
@@ -146,13 +146,7 @@ target_port_exp_dollar_rtn_list = map(lambda x: x[0]*x[1]*float(config["general"
 ###################################################
 print
 print 100 * "-"
-print "Target portfolio:  E[r] = %s stdev = %s Sharpe ratio = %s Kelly f* = %s" % (str(round(target_port_exp_rtn*100, 3)) + " %", str(round(target_port_stdev*100,3)) + " %", round(target_port_sharpe_ratio,3), str(round(target_port_kelly_f,3)))
-
-###################################################
-# target return
-###################################################
-print "Target portfolio:  Expected return for 1 year: HKD %s" % (intWithCommas(int(sum(target_port_exp_dollar_rtn_list))))
-# print '\n'.join(map(lambda x: justify_str(x[0],7) + ":  HKD " + justify_str(intWithCommas(int(x[1])),8), filter(lambda y: abs(y[1]) > 1 , sorted(zip(symbol_list,target_port_exp_dollar_rtn_list), key=lambda tup: tup[1], reverse=True))))
+print "Target  portfolio: E[r] = %s stdev = %s Sharpe ratio = %s Kelly f* = %s" % (justify_str(round(target_port_exp_rtn*100, 3),7) + " %", justify_str(round(target_port_stdev*100,3),7) + " %", justify_str(round(target_port_sharpe_ratio,3),5), justify_str(round(target_port_kelly_f,3),7))
 
 ###################################################
 sym_sol_list = filter(lambda x: abs(x[1]) > 0.001, zip(symbol_list,sol_list))
@@ -164,9 +158,15 @@ sym_sol_list.extend(map(lambda x: (x,0.0), filter(lambda k: k not in map(lambda 
 ###################################################
 if len(current_pos_list) > 0:
     current_port_exp_dollar_rtn_list = map(lambda s: (s,int(expected_rtn_dict[s] * current_mkt_val_dict[s])), current_mkt_val_dict.keys())
-    print "Current portfolio: E[r] = %s stdev = %s Sharpe ratio = %s Kelly f* = %s" % (str(round(cur_port_exp_rtn*100, 3)) + " %", str(round(cur_port_stdev*100,3)) + " %", round(cur_port_sharpe_ratio,3), round(cur_port_exp_rtn/cur_port_stdev/cur_port_stdev,3))
+    print "Current portfolio: E[r] = %s stdev = %s Sharpe ratio = %s Kelly f* = %s" % (justify_str(round(cur_port_exp_rtn*100, 3),7) + " %", justify_str(round(cur_port_stdev*100,3),7) + " %", justify_str(round(cur_port_sharpe_ratio,3),5), justify_str(round(cur_port_exp_rtn/cur_port_stdev/cur_port_stdev,3),7))
 
-print "Target portfolio:  Market value: HKD %s" % (justify_str(intWithCommas(int(float(config["general"]["capital"]))),11))
+###################################################
+# target return
+###################################################
+print "Target  portfolio: Expected return for 1 year: HKD %s" % (intWithCommas(int(sum(target_port_exp_dollar_rtn_list))))
+# print '\n'.join(map(lambda x: justify_str(x[0],7) + ":  HKD " + justify_str(intWithCommas(int(x[1])),8), filter(lambda y: abs(y[1]) > 1 , sorted(zip(symbol_list,target_port_exp_dollar_rtn_list), key=lambda tup: tup[1], reverse=True))))
+
+print "Target  portfolio: Market value: HKD %s" % (justify_str(intWithCommas(int(float(config["general"]["capital"]))),11))
 if len(current_pos_list) > 0:
     current_port_mkt_val = sum(current_mkt_val_dict.values())
     print "Current portfolio: Market value: HKD %s" % (justify_str(intWithCommas(int(current_port_mkt_val)),11))
