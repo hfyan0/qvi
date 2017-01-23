@@ -26,18 +26,47 @@ hsi_expected_return_list = sorted(map(lambda y: (datetime.strptime(y[1],"%Y-%m-%
 hsi_hhi_constituents_list = map(lambda x: (x[0],datetime.strptime(x[1],"%Y-%m-%d").date(),datetime.strptime(x[2],"%Y-%m-%d").date()), read_file(config["general"]["hsi_hhi_constituents"]))
 
 ###################################################
-hist_adj_px_list = sorted(map(lambda d: (datetime.strptime(d[0],"%Y-%m-%d").date(),d[1],float(d[2])), read_file(config["general"]["hist_adj_px"])), key=lambda x: x[0])
+hist_adj_px_list = sorted(map(lambda d: (datetime.strptime(d[0],"%Y-%m-%d").date(),d[1],float(d[2])), read_file(config["hist_data"]["hist_adj_px"])), key=lambda x: x[0])
 hist_adj_px_dict = {}
 for d,it_lstup in groupby(hist_adj_px_list, lambda x: x[0]):
     hist_adj_px_dict[d] = dict(map(lambda x: (x[1],x[2]), list(it_lstup)))
 
 hist_bp_ratio_dict = {}
-for d,it_lstup in groupby(sorted(read_file(config["general"]["hist_pb_ratio"]), key=lambda x: x[0]), lambda x: x[0]):
+for d,it_lstup in groupby(sorted(read_file(config["hist_data"]["hist_pb_ratio"]), key=lambda x: x[0]), lambda x: x[0]):
     if config["general"]["prefer_low_pb"].lower() == "true":
         hist_bp_ratio_dict[datetime.strptime(d,"%Y-%m-%d").date()] = dict(map(lambda x: (x[1],1.0/float(x[2])), list(it_lstup)))
     else:
         hist_bp_ratio_dict[datetime.strptime(d,"%Y-%m-%d").date()] = dict(map(lambda x: (x[1],float(x[2])), list(it_lstup)))
 
+hist_totasset_dict = {}
+for sym,it_lstup in groupby(sorted(read_file(config["hist_data"]["hist_totasset"]), key=lambda x: x[1]), lambda x: x[1]):
+    hist_totasset_dict[sym] = dict(map(lambda x: (datetime.strptime(x[0],"%Y-%m-%d").date(),float(x[2])), list(it_lstup)))
+
+hist_totequity_dict = {}
+for sym,it_lstup in groupby(sorted(read_file(config["hist_data"]["hist_totequity"]), key=lambda x: x[1]), lambda x: x[1]):
+    hist_totequity_dict[sym] = dict(map(lambda x: (datetime.strptime(x[0],"%Y-%m-%d").date(),float(x[2])), list(it_lstup)))
+
+hist_intexp_dict = {}
+for sym,it_lstup in groupby(sorted(read_file(config["hist_data"]["hist_intexp"]), key=lambda x: x[1]), lambda x: x[1]):
+    hist_intexp_dict[sym] = dict(map(lambda x: (datetime.strptime(x[0],"%Y-%m-%d").date(),float(x[2])), list(it_lstup)))
+
+hist_operatingexp_dict = {}
+for sym,it_lstup in groupby(sorted(read_file(config["hist_data"]["hist_operatingexp"]), key=lambda x: x[1]), lambda x: x[1]):
+    hist_operatingexp_dict[sym] = dict(map(lambda x: (datetime.strptime(x[0],"%Y-%m-%d").date(),float(x[2])), list(it_lstup)))
+
+hist_cogs_dict = {}
+for sym,it_lstup in groupby(sorted(read_file(config["hist_data"]["hist_cogs"]), key=lambda x: x[1]), lambda x: x[1]):
+    hist_cogs_dict[sym] = dict(map(lambda x: (datetime.strptime(x[0],"%Y-%m-%d").date(),float(x[2])), list(it_lstup)))
+
+hist_revenue_dict = {}
+for sym,it_lstup in groupby(sorted(read_file(config["hist_data"]["hist_revenue"]), key=lambda x: x[1]), lambda x: x[1]):
+    hist_revenue_dict[sym] = dict(map(lambda x: (datetime.strptime(x[0],"%Y-%m-%d").date(),float(x[2])), list(it_lstup)))
+
+hist_mktcap_dict = {}
+for sym,it_lstup in groupby(sorted(read_file(config["hist_data"]["hist_mktcap"]), key=lambda x: x[1]), lambda x: x[1]):
+    hist_mktcap_dict[sym] = dict(map(lambda x: (datetime.strptime(x[0],"%Y-%m-%d").date(),float(x[2])), list(it_lstup)))
+
+###################################################
 start_date = datetime.strptime(config["general"]["start_date"],"%Y-%m-%d").date()
 date_list = sorted(filter(lambda x: x >= start_date, list(set(hist_adj_px_dict.keys()).intersection(set(hist_bp_ratio_dict.keys())))))
 
@@ -56,11 +85,68 @@ cash = float(config["general"]["init_capital"])
 for dt in rebalance_date_list:
     avb_constituent_set = set(map(lambda x: x[0], filter(lambda z: dt<=z[2], filter(lambda y: y[1]<=dt, hsi_hhi_constituents_list))))
     # print "avb_constituent_set: %s" % avb_constituent_set
+
+    ###################################################
     sym_bp_list = sorted(filter(lambda x: (x[0] in traded_symbol_set) and (x[0] in avb_constituent_set), list(hist_bp_ratio_dict[dt].items())), key=lambda x: x[0])
-    if len(sym_bp_list) < min_no_of_avb_sym:
-        continue
     symbol_list = map(lambda x: x[0], sym_bp_list)
-    # print "symbol_list: %s" % symbol_list
+    symbol_list = filter(lambda x: x in hist_revenue_dict, symbol_list)
+    symbol_list = filter(lambda x: x in hist_totasset_dict, filter(lambda y: y in hist_totequity_dict, symbol_list))
+
+    ###################################################
+    # Size
+    ###################################################
+    mktcap_dict = {}
+    for sym in symbol_list:
+        mktcap_list = filter(lambda x: x[0] <= dt, hist_mktcap_dict[sym].items())
+        if len(mktcap_list) >= 1:
+            mktcap_dict[sym] = mktcap_list[-1]
+    smallcap_sym_list = map(lambda y: y[0], sorted(mktcap_dict.items(),key=lambda x: x[1]))[:int(float(config["general"]["fama_french_size_proportion"])*len(mktcap_dict))]
+
+    ###################################################
+    # Investment
+    ###################################################
+    asset_growth_dict = {}
+    for sym in symbol_list:
+        # after considering delay in financial reporting
+        totasset_list = filter(lambda y: y[0] > dt - timedelta(weeks = float(52.0/12.0*15.0)), filter(lambda x: x[0] <= dt - timedelta(weeks = float(52.0/12.0*3.0)), hist_totasset_dict[sym].items()))
+        if len(totasset_list) >= 2:
+            asset_growth = totasset_list[-1][1] / totasset_list[0][1]
+            asset_growth_dict[sym] = asset_growth
+    not_much_growth_sym_list = map(lambda y: y[0], sorted(asset_growth_dict.items(),key=lambda x: x[1]))[:int(float(config["general"]["fama_french_invm_proportion"])*len(asset_growth_dict))]
+
+    # print "not_much_growth_sym_list: %s" % not_much_growth_sym_list
+
+    ###################################################
+    # Operating Profitability
+    ###################################################
+    op_list = {}
+    for sym in symbol_list:
+        # after considering delay in financial reporting
+        rev_list = filter(lambda x: x[0] <= dt - timedelta(weeks = float(52.0/12.0*3.0)), hist_revenue_dict.get(sym,{}).items())
+        cogs_list = filter(lambda x: x[0] <= dt - timedelta(weeks = float(52.0/12.0*3.0)), hist_cogs_dict.get(sym,{}).items())
+        intexp_list = filter(lambda x: x[0] <= dt - timedelta(weeks = float(52.0/12.0*3.0)), hist_intexp_dict.get(sym,{}).items())
+        operatingexp_list = filter(lambda x: x[0] <= dt - timedelta(weeks = float(52.0/12.0*3.0)), hist_operatingexp_dict.get(sym,{}).items())
+        totequity_list = filter(lambda x: x[0] <= dt - timedelta(weeks = float(52.0/12.0*3.0)), hist_totequity_dict.get(sym,{}).items())
+
+        rev = rev_list[-1][1] if len(rev_list) >= 1 else 0.0
+        cogs = cogs_list[-1][1] if len(cogs_list) >= 1 else 0.0
+        intexp = intexp_list[-1][1] if len(intexp_list) >= 1 else 0.0
+        operatingexp = operatingexp_list[-1][1] if len(operatingexp_list) >= 1 else 0.0
+        totequity = totequity_list[-1][1] if len(totequity_list) >= 1 else 0.0
+        if abs(totequity) > 0.01:
+            op_list[sym] = (rev - cogs - operatingexp - intexp) / totequity
+    high_op_sym_list = map(lambda y: y[0], sorted(op_list.items(),key=lambda x: x[1]))[-int(float(config["general"]["fama_french_op_proportion"])*len(op_list)):]
+
+    # print "high_op_sym_list: %s" % high_op_sym_list
+
+    ###################################################
+    # check whether we have enough stocks to choose from
+    ###################################################
+    symbol_list = filter(lambda z: z in smallcap_sym_list, filter(lambda y: y in high_op_sym_list, filter(lambda x: x in not_much_growth_sym_list, symbol_list)))
+    if len(symbol_list) < min_no_of_avb_sym:
+        continue
+
+    sym_bp_list = filter(lambda x: x[0] in symbol_list, sym_bp_list)
     expected_rtn_list = map(lambda x: x[1], sym_bp_list)
     max_weight_list = map(lambda x: float(max_weight_dict[x]), symbol_list)
     from_tgt_rtn = min(map(lambda x: x[1], sym_bp_list))
@@ -154,7 +240,7 @@ for dt in rebalance_date_list:
     else:
         capital_to_use = cash
     ###################################################
-    
+
     ###################################################
     # buy back
     ###################################################
@@ -166,9 +252,10 @@ for dt in rebalance_date_list:
     most_correlated_idx_idx = sorted(enumerate(port_beta_list), key=lambda x: x[1])[-1][0]
     most_correlated_idx_sym = hedging_symbol_list[most_correlated_idx_idx]
 
-    if config["general"]["use_beta_hedge"].lower() == "true":
+    h = -1.0
+    if config["general"]["hedging_type"].lower() == "beta":
         pos_dict[most_correlated_idx_sym] = -port_beta_list[most_correlated_idx_idx] * capital_to_use / hist_adj_px_dict[dt][most_correlated_idx_sym]
-    else:
+    elif config["general"]["hedging_type"].lower() == "smart":
         h = min(max(port_beta_list[most_correlated_idx_idx] - hsi_expected_return / 100.0 / 0.7, 0.0), 1.0)
         pos_dict[most_correlated_idx_sym] = -h * capital_to_use / hist_adj_px_dict[dt][most_correlated_idx_sym]
     ###################################################
