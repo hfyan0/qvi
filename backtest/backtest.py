@@ -66,6 +66,10 @@ hist_mktcap_dict = {}
 for sym,it_lstup in groupby(sorted(read_file(config["hist_data"]["hist_mktcap"]), key=lambda x: x[1]), lambda x: x[1]):
     hist_mktcap_dict[sym] = dict(map(lambda x: (datetime.strptime(x[0],"%Y-%m-%d").date(),float(x[2])), list(it_lstup)))
 
+hist_roe_dict = {}
+for sym,it_lstup in groupby(sorted(read_file(config["hist_data"]["hist_roe"]), key=lambda x: x[1]), lambda x: x[1]):
+    hist_roe_dict[sym] = dict(map(lambda x: (datetime.strptime(x[0],"%Y-%m-%d").date(),float(x[2])), list(it_lstup)))
+
 ###################################################
 start_date = datetime.strptime(config["general"]["start_date"],"%Y-%m-%d").date()
 date_list = sorted(filter(lambda x: x >= start_date, list(set(hist_adj_px_dict.keys()).intersection(set(hist_bp_ratio_dict.keys())))))
@@ -100,7 +104,10 @@ for dt in rebalance_date_list:
         mktcap_list = filter(lambda x: x[0] <= dt, hist_mktcap_dict[sym].items())
         if len(mktcap_list) >= 1:
             mktcap_dict[sym] = mktcap_list[-1]
-    smallcap_sym_list = map(lambda y: y[0], sorted(mktcap_dict.items(),key=lambda x: x[1]))[:int(float(config["general"]["fama_french_size_proportion"])*len(mktcap_dict))]
+    if config["general"]["SML"].lower() == "true":
+        smallcap_sym_list = map(lambda y: y[0], sorted(mktcap_dict.items(),key=lambda x: x[1]))[-int(float(config["general"]["fama_french_size_proportion"])*len(mktcap_dict)):]
+    else:
+        smallcap_sym_list = map(lambda y: y[0], sorted(mktcap_dict.items(),key=lambda x: x[1]))[:int(float(config["general"]["fama_french_size_proportion"])*len(mktcap_dict))]
 
     ###################################################
     # Investment
@@ -112,37 +119,59 @@ for dt in rebalance_date_list:
         if len(totasset_list) >= 2:
             asset_growth = totasset_list[-1][1] / totasset_list[0][1]
             asset_growth_dict[sym] = asset_growth
-    not_much_growth_sym_list = map(lambda y: y[0], sorted(asset_growth_dict.items(),key=lambda x: x[1]))[:int(float(config["general"]["fama_french_invm_proportion"])*len(asset_growth_dict))]
+    if config["general"]["CMA"].lower() == "true":
+        conservative_sym_list = map(lambda y: y[0], sorted(asset_growth_dict.items(),key=lambda x: x[1]))[:int(float(config["general"]["fama_french_invm_proportion"])*len(asset_growth_dict))]
+    else:
+        conservative_sym_list = map(lambda y: y[0], sorted(asset_growth_dict.items(),key=lambda x: x[1]))[-int(float(config["general"]["fama_french_invm_proportion"])*len(asset_growth_dict)):]
 
-    # print "not_much_growth_sym_list: %s" % not_much_growth_sym_list
+    # print "asset_growth_dict: %s" % sorted(asset_growth_dict.items(), key=lambda x: x[1])
+    # print "conservative_sym_list: %s" % conservative_sym_list
+
+    # ###################################################
+    # # Operating Profitability
+    # ###################################################
+    # op_dict = {}
+    # for sym in symbol_list:
+    #     # after considering delay in financial reporting
+    #     rev_list = filter(lambda y: y[0] > dt - timedelta(weeks = float(52.0/12.0*15.0)), filter(lambda x: x[0] <= dt - timedelta(weeks = float(52.0/12.0*3.0)), hist_revenue_dict.get(sym,{}).items()))
+    #     cogs_list = filter(lambda y: y[0] > dt - timedelta(weeks = float(52.0/12.0*15.0)), filter(lambda x: x[0] <= dt - timedelta(weeks = float(52.0/12.0*3.0)), hist_cogs_dict.get(sym,{}).items()))
+    #     intexp_list = filter(lambda y: y[0] > dt - timedelta(weeks = float(52.0/12.0*15.0)), filter(lambda x: x[0] <= dt - timedelta(weeks = float(52.0/12.0*3.0)), hist_intexp_dict.get(sym,{}).items()))
+    #     operatingexp_list = filter(lambda y: y[0] > dt - timedelta(weeks = float(52.0/12.0*15.0)), filter(lambda x: x[0] <= dt - timedelta(weeks = float(52.0/12.0*3.0)), hist_operatingexp_dict.get(sym,{}).items()))
+    #     totequity_list = filter(lambda x: x[0] <= dt - timedelta(weeks = float(52.0/12.0*15.0)), hist_totequity_dict.get(sym,{}).items())
+    #
+    #     rev = sum(map(lambda x: x[1], rev_list))
+    #     cogs = sum(map(lambda x: x[1], cogs_list))
+    #     intexp = sum(map(lambda x: x[1], intexp_list))
+    #     operatingexp = sum(map(lambda x: x[1], operatingexp_list))
+    #     totequity = totequity_list[-1][1] if len(totequity_list) >= 1 else 0.0
+    #     if abs(totequity) > 0.01:
+    #         op_dict[sym] = (rev - cogs - operatingexp - intexp) / totequity
+    #
+    # # print "op_dict: %s" % sorted(op_dict.items(), key=lambda x: x[1])
+    # high_op_sym_list = map(lambda y: y[0], sorted(op_dict.items(),key=lambda x: x[1]))[-int(float(config["general"]["fama_french_op_proportion"])*len(op_dict)):]
+    #
+    # # print "high_op_sym_list: %s" % high_op_sym_list
 
     ###################################################
     # Operating Profitability
     ###################################################
-    op_list = {}
+    op_dict = {}
     for sym in symbol_list:
         # after considering delay in financial reporting
-        rev_list = filter(lambda x: x[0] <= dt - timedelta(weeks = float(52.0/12.0*3.0)), hist_revenue_dict.get(sym,{}).items())
-        cogs_list = filter(lambda x: x[0] <= dt - timedelta(weeks = float(52.0/12.0*3.0)), hist_cogs_dict.get(sym,{}).items())
-        intexp_list = filter(lambda x: x[0] <= dt - timedelta(weeks = float(52.0/12.0*3.0)), hist_intexp_dict.get(sym,{}).items())
-        operatingexp_list = filter(lambda x: x[0] <= dt - timedelta(weeks = float(52.0/12.0*3.0)), hist_operatingexp_dict.get(sym,{}).items())
-        totequity_list = filter(lambda x: x[0] <= dt - timedelta(weeks = float(52.0/12.0*3.0)), hist_totequity_dict.get(sym,{}).items())
+        roe_list = filter(lambda y: y[0] > dt - timedelta(weeks = float(52.0/12.0*15.0)), filter(lambda x: x[0] <= dt - timedelta(weeks = float(52.0/12.0*3.0)), hist_roe_dict.get(sym,{}).items()))
+        if len(roe_list) >= 1:
+            op_dict[sym] = roe_list[-1]
 
-        rev = rev_list[-1][1] if len(rev_list) >= 1 else 0.0
-        cogs = cogs_list[-1][1] if len(cogs_list) >= 1 else 0.0
-        intexp = intexp_list[-1][1] if len(intexp_list) >= 1 else 0.0
-        operatingexp = operatingexp_list[-1][1] if len(operatingexp_list) >= 1 else 0.0
-        totequity = totequity_list[-1][1] if len(totequity_list) >= 1 else 0.0
-        if abs(totequity) > 0.01:
-            op_list[sym] = (rev - cogs - operatingexp - intexp) / totequity
-    high_op_sym_list = map(lambda y: y[0], sorted(op_list.items(),key=lambda x: x[1]))[-int(float(config["general"]["fama_french_op_proportion"])*len(op_list)):]
+    if config["general"]["RMW"].lower() == "true":
+        high_op_sym_list = map(lambda y: y[0], sorted(op_dict.items(),key=lambda x: x[1]))[-int(float(config["general"]["fama_french_op_proportion"])*len(op_dict)):]
+    else:
+        high_op_sym_list = map(lambda y: y[0], sorted(op_dict.items(),key=lambda x: x[1]))[:int(float(config["general"]["fama_french_op_proportion"])*len(op_dict))]
 
-    # print "high_op_sym_list: %s" % high_op_sym_list
 
     ###################################################
     # check whether we have enough stocks to choose from
     ###################################################
-    symbol_list = filter(lambda z: z in smallcap_sym_list, filter(lambda y: y in high_op_sym_list, filter(lambda x: x in not_much_growth_sym_list, symbol_list)))
+    symbol_list = filter(lambda z: z in smallcap_sym_list, filter(lambda y: y in high_op_sym_list, filter(lambda x: x in conservative_sym_list, symbol_list)))
     if len(symbol_list) < min_no_of_avb_sym:
         continue
 
