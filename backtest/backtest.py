@@ -24,6 +24,7 @@ max_weight_dict = config["max_weight"]
 her = config["general"]["hsi_expected_return"]
 hsi_expected_return_list = sorted(map(lambda y: (datetime.strptime(y[1],"%Y-%m-%d").date(),float(y[2])), filter(lambda x: x[0]%2==0, zip(range(len(her)-1),her[:-1],her[1:]))), key=lambda x: x[0])
 hsi_hhi_constituents_list = map(lambda x: (x[0],datetime.strptime(x[1],"%Y-%m-%d").date(),datetime.strptime(x[2],"%Y-%m-%d").date()), read_file(config["general"]["hsi_hhi_constituents"]))
+dow_constituents_list = sorted(map(lambda x: (datetime.strptime(x[0],"%Y-%m-%d").date(),x[1:]), read_file(config["general"]["dow_constituents"])), key=lambda y: y[0])
 
 ###################################################
 hist_adj_px_list = sorted(map(lambda d: (datetime.strptime(d[0],"%Y-%m-%d").date(),d[1],float(d[2])), read_file(config["hist_data"]["hist_adj_px"])), key=lambda x: x[0])
@@ -87,14 +88,17 @@ cash = float(config["general"]["init_capital"])
 
 ###################################################
 for dt in rebalance_date_list:
-    avb_constituent_set = set(map(lambda x: x[0], filter(lambda z: dt<=z[2], filter(lambda y: y[1]<=dt, hsi_hhi_constituents_list))))
+    avb_constituent_set = set(map(lambda x: x[0], filter(lambda z: dt<=z[2], filter(lambda y: y[1]<=dt, hsi_hhi_constituents_list))) + filter(lambda x: x[0] <= dt, dow_constituents_list)[-1][1])
     # print "avb_constituent_set: %s" % avb_constituent_set
 
     ###################################################
     sym_bp_list = sorted(filter(lambda x: (x[0] in traded_symbol_set) and (x[0] in avb_constituent_set), list(hist_bp_ratio_dict[dt].items())), key=lambda x: x[0])
     symbol_list = map(lambda x: x[0], sym_bp_list)
-    symbol_list = filter(lambda x: x in hist_revenue_dict, symbol_list)
-    symbol_list = filter(lambda x: x in hist_totasset_dict, filter(lambda y: y in hist_totequity_dict, symbol_list))
+    # symbol_list = filter(lambda x: x in hist_revenue_dict, symbol_list)
+    # symbol_list = filter(lambda x: x in hist_totasset_dict, filter(lambda y: y in hist_totequity_dict, symbol_list))
+    symbol_list = filter(lambda x: x in hist_roe_dict, symbol_list)
+    symbol_list = filter(lambda x: x in hist_totasset_dict, symbol_list)
+    symbol_list = filter(lambda x: x in hist_mktcap_dict, symbol_list)
 
     ###################################################
     # Size
@@ -169,15 +173,24 @@ for dt in rebalance_date_list:
 
 
     ###################################################
+    if float(config["general"]["fama_french_size_proportion"]) >= 0.0:
+        symbol_list = filter(lambda x: x in smallcap_sym_list, symbol_list)
+
+    if float(config["general"]["fama_french_op_proportion"]) >= 0.0:
+        symbol_list = filter(lambda x: x in high_op_sym_list, symbol_list)
+
+    if float(config["general"]["fama_french_conser_proportion"]) >= 0.0:
+        symbol_list = filter(lambda x: x in conservative_sym_list, symbol_list)
+
+    ###################################################
     # check whether we have enough stocks to choose from
     ###################################################
-    symbol_list = filter(lambda z: z in smallcap_sym_list, filter(lambda y: y in high_op_sym_list, filter(lambda x: x in conservative_sym_list, symbol_list)))
     if len(symbol_list) < min_no_of_avb_sym:
         continue
 
     sym_bp_list = filter(lambda x: x[0] in symbol_list, sym_bp_list)
     expected_rtn_list = map(lambda x: x[1], sym_bp_list)
-    max_weight_list = map(lambda x: float(max_weight_dict[x]), symbol_list)
+    max_weight_list = map(lambda x: float(max_weight_dict.get(x,max_weight_dict["default"])), symbol_list)
     from_tgt_rtn = min(map(lambda x: x[1], sym_bp_list))
     to_tgt_rtn = max(map(lambda x: x[1], sym_bp_list))
 
@@ -283,12 +296,13 @@ for dt in rebalance_date_list:
 
     h = -1.0
     if config["general"]["hedging_type"].lower() == "beta":
-        pos_dict[most_correlated_idx_sym] = -port_beta_list[most_correlated_idx_idx] * capital_to_use / hist_adj_px_dict[dt][most_correlated_idx_sym]
+        h = port_beta_list[most_correlated_idx_idx]
+        pos_dict[most_correlated_idx_sym] = -h * capital_to_use / hist_adj_px_dict[dt][most_correlated_idx_sym]
     elif config["general"]["hedging_type"].lower() == "smart":
         h = min(max(port_beta_list[most_correlated_idx_idx] - hsi_expected_return / 100.0 / 0.7, 0.0), 1.0)
         pos_dict[most_correlated_idx_sym] = -h * capital_to_use / hist_adj_px_dict[dt][most_correlated_idx_sym]
     ###################################################
     # print "mkt val of pos: %s" % sum([hist_adj_px_dict[dt][s]*pos for s,pos in pos_dict.items()])
-    print str(dt)+","+str(round(cash,0))+","+','.join(map(str,map(lambda x: round(x,5), port_beta_list)))+","+most_correlated_idx_sym+","+str(round(h,5))+","+str(len(sym_weight_dict))+","+','.join(map(lambda x: ':'.join(x), sym_px_weight_list))+','+",".join(map(lambda x: "pos_"+x[0]+'_'+str(x[1]), pos_dict.items()))
+    print str(dt)+","+str(round(cash,0))+","+','.join(map(str,map(lambda x: round(x,5), port_beta_list)))+","+most_correlated_idx_sym+","+str(round(h,5))+",["+str(len(sym_weight_dict))+"],"+','.join(map(lambda x: ':'.join(x), sym_px_weight_list))+','+",".join(map(lambda x: "pos_"+x[0]+'_'+str(x[1]), pos_dict.items()))
     cash -= float(sum([hist_adj_px_dict[dt].get(s,filter(lambda x: x[1]==s, hist_adj_px_list)[-1][2])*pos for s,pos in pos_dict.items()]))
     ###################################################
