@@ -120,9 +120,9 @@ for dt in rebalance_date_list:
             asset_growth = totasset_list[-1][1] / totasset_list[0][1]
             asset_growth_dict[sym] = asset_growth
     if config["general"]["CMA"].lower() == "true":
-        conservative_sym_list = map(lambda y: y[0], sorted(asset_growth_dict.items(),key=lambda x: x[1]))[:int(float(config["general"]["fama_french_invm_proportion"])*len(asset_growth_dict))]
+        conservative_sym_list = map(lambda y: y[0], sorted(asset_growth_dict.items(),key=lambda x: x[1]))[:int(float(config["general"]["fama_french_conser_proportion"])*len(asset_growth_dict))]
     else:
-        conservative_sym_list = map(lambda y: y[0], sorted(asset_growth_dict.items(),key=lambda x: x[1]))[-int(float(config["general"]["fama_french_invm_proportion"])*len(asset_growth_dict)):]
+        conservative_sym_list = map(lambda y: y[0], sorted(asset_growth_dict.items(),key=lambda x: x[1]))[-int(float(config["general"]["fama_french_conser_proportion"])*len(asset_growth_dict)):]
 
     # print "asset_growth_dict: %s" % sorted(asset_growth_dict.items(), key=lambda x: x[1])
     # print "conservative_sym_list: %s" % conservative_sym_list
