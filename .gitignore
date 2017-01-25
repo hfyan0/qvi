@@ -1,2 +1,5 @@
 *.html
 current_prices
+out_*
+hist_*
+*.swp
