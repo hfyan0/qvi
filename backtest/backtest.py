@@ -9,8 +9,10 @@ from itertools import groupby
 
 import os
 sys.path.append(os.path.dirname(sys.path[0]))
-from mvo import calc_cov_matrix_annualized,conv_to_hkd,intWithCommas,justify_str,markowitz,markowitz_robust,log_optimal_growth,read_file,extract_sd_from_cov_matrix
+from mvo import calc_cov_matrix_annualized,conv_to_hkd,intWithCommas,justify_str,markowitz,markowitz_robust,log_optimal_growth,read_file,extract_sd_from_cov_matrix,calc_return_list
 
+###################################################
+AUDIT_DELAY = 3.0
 ###################################################
 def get_hist_data_key_date(filename):
     rtn_dict = {}
@@ -23,6 +25,9 @@ def get_hist_data_key_sym(filename):
     for s,it_lstup in groupby(sorted(read_file(filename), key=lambda x: x[1]), lambda x: x[1]):
         rtn_dict[s] = sorted(map(lambda y: (datetime.strptime(y[0],"%Y-%m-%d").date(),float(y[2])), filter(lambda x: abs(float(x[2])) > 0.0001, list(it_lstup))), key=lambda x: x[0])
     return rtn_dict
+
+def shift_back_n_months(dt,n):
+    return dt - timedelta(weeks = float(52.0/12.0*float(n)))
 
 ###################################################
 config = ConfigObj('config.ini')
@@ -41,9 +46,8 @@ dow_constituents_list = sorted(map(lambda x: (datetime.strptime(x[0],"%Y-%m-%d")
 
 ###################################################
 hist_adj_px_dict = get_hist_data_key_date(config["hist_data"]["hist_adj_px"])
-hist_adj_px_list = map(lambda x: (datetime.strptime(x[0],"%Y-%m-%d").date(),x[1],float(x[2])), read_file(config["hist_data"]["hist_adj_px"]))
+hist_adj_px_list_sorted = sorted(list(set(map(lambda x: (datetime.strptime(x[0],"%Y-%m-%d").date(),x[1],float(x[2])), read_file(config["hist_data"]["hist_adj_px"])))),key=lambda y: y[0])
 hist_unadj_px_dict = get_hist_data_key_date(config["hist_data"]["hist_unadj_px"])
-hist_unadj_px_list = map(lambda x: (datetime.strptime(x[0],"%Y-%m-%d").date(),x[1],float(x[2])), read_file(config["hist_data"]["hist_unadj_px"]))
 hist_bps_dict = get_hist_data_key_sym(config["hist_data"]["hist_bps"])
 hist_totasset_dict = get_hist_data_key_sym(config["hist_data"]["hist_totasset"])
 hist_totequity_dict = get_hist_data_key_sym(config["hist_data"]["hist_totequity"])
@@ -52,7 +56,14 @@ hist_operatingexp_dict = get_hist_data_key_sym(config["hist_data"]["hist_operati
 hist_cogs_dict = get_hist_data_key_sym(config["hist_data"]["hist_cogs"])
 hist_revenue_dict = get_hist_data_key_sym(config["hist_data"]["hist_revenue"])
 hist_mktcap_dict = get_hist_data_key_sym(config["hist_data"]["hist_mktcap"])
-hist_roe_dict = get_hist_data_key_sym(config["hist_data"]["hist_roe"])
+hist_oper_roe_dict = get_hist_data_key_sym(config["hist_data"]["hist_oper_roe"])
+hist_oper_eps_dict = get_hist_data_key_sym(config["hist_data"]["hist_oper_eps"])
+hist_eqytoast_dict = get_hist_data_key_sym(config["hist_data"]["hist_eqytoast"])
+hist_stattaxrate_dict = get_hist_data_key_sym(config["hist_data"]["hist_stattaxrate"])
+hist_operincm_dict = get_hist_data_key_sym(config["hist_data"]["hist_operincm"])
+hist_costofdebt_dict = get_hist_data_key_sym(config["hist_data"]["hist_costofdebt"])
+hist_totliabps_dict = get_hist_data_key_sym(config["hist_data"]["hist_totliabps"])
+
 
 ###################################################
 start_date = datetime.strptime(config["general"]["start_date"],"%Y-%m-%d").date()
@@ -78,22 +89,32 @@ for dt in rebalance_date_list:
     symbol_list = filter(lambda x: x in hist_adj_px_dict[dt], symbol_list)
     symbol_list = filter(lambda x: x in hist_unadj_px_dict[dt], symbol_list)
     symbol_list = filter(lambda x: x in hist_bps_dict, symbol_list)
-    symbol_list = filter(lambda x: x in hist_roe_dict, symbol_list)
+    symbol_list = filter(lambda x: x in hist_oper_roe_dict, symbol_list)
     symbol_list = filter(lambda x: x in hist_totasset_dict, symbol_list)
     symbol_list = filter(lambda x: x in hist_mktcap_dict, symbol_list)
 
     ###################################################
     # book-to-price
+    # asset-to-price
     ###################################################
     bp_list = []
+    bp_conservative_list = []
     for sym in symbol_list:
-        bps_list = map(lambda z: z[1], filter(lambda y: y[0] > dt - timedelta(weeks = float(52.0/12.0*39.0)), filter(lambda x: x[0] <= dt - timedelta(weeks = float(52.0/12.0*3.0)), hist_bps_dict[sym])))
+        bps_list = map(lambda z: z[1], filter(lambda y: y[0] > shift_back_n_months(dt,36+AUDIT_DELAY), filter(lambda x: x[0] <= shift_back_n_months(dt,AUDIT_DELAY), hist_bps_dict[sym])))
+        ###################################################
         if len(bps_list) >= 3:
-            m = float(sum(bps_list)) / float(len(bps_list))
-            sd = np.std(np.asarray(bps_list))
-            bp_list.append((m - float(config["general"]["bp_stdev"]) * sd) / hist_unadj_px_dict[dt][sym])
+            sd = np.std(np.asarray(calc_return_list(bps_list)))
+            bp_conservative_list.append((bps_list[-1] - float(config["general"]["bp_stdev"]) * sd * bps_list[-1]) / hist_unadj_px_dict[dt][sym])
+        elif len(bps_list) > 0:
+            bp_conservative_list.append(bps_list[-1] / hist_unadj_px_dict[dt][sym])
+        else:
+            bp_conservative_list.append(0.0)
+        ###################################################
+        if len(bps_list) > 0:
+            bp_list.append(bps_list[-1] / hist_unadj_px_dict[dt][sym])
         else:
             bp_list.append(0.0)
+        ###################################################
 
     ###################################################
     # Size
@@ -114,7 +135,7 @@ for dt in rebalance_date_list:
     asset_growth_dict = {}
     for sym in symbol_list:
         # after considering delay in financial reporting
-        totasset_list = filter(lambda y: y[0] > dt - timedelta(weeks = float(52.0/12.0*15.0)), filter(lambda x: x[0] <= dt - timedelta(weeks = float(52.0/12.0*3.0)), hist_totasset_dict[sym]))
+        totasset_list = filter(lambda y: y[0] > shift_back_n_months(dt,12+AUDIT_DELAY), filter(lambda x: x[0] <= shift_back_n_months(dt,AUDIT_DELAY), hist_totasset_dict[sym]))
         if len(totasset_list) >= 2:
             asset_growth = totasset_list[-1][1] / totasset_list[0][1]
             asset_growth_dict[sym] = asset_growth
@@ -132,11 +153,11 @@ for dt in rebalance_date_list:
     # op_dict = {}
     # for sym in symbol_list:
     #     # after considering delay in financial reporting
-    #     rev_list = filter(lambda y: y[0] > dt - timedelta(weeks = float(52.0/12.0*15.0)), filter(lambda x: x[0] <= dt - timedelta(weeks = float(52.0/12.0*3.0)), hist_revenue_dict.get(sym,[])))
-    #     cogs_list = filter(lambda y: y[0] > dt - timedelta(weeks = float(52.0/12.0*15.0)), filter(lambda x: x[0] <= dt - timedelta(weeks = float(52.0/12.0*3.0)), hist_cogs_dict.get(sym,[])))
-    #     intexp_list = filter(lambda y: y[0] > dt - timedelta(weeks = float(52.0/12.0*15.0)), filter(lambda x: x[0] <= dt - timedelta(weeks = float(52.0/12.0*3.0)), hist_intexp_dict.get(sym,[])))
-    #     operatingexp_list = filter(lambda y: y[0] > dt - timedelta(weeks = float(52.0/12.0*15.0)), filter(lambda x: x[0] <= dt - timedelta(weeks = float(52.0/12.0*3.0)), hist_operatingexp_dict.get(sym,[])))
-    #     totequity_list = filter(lambda x: x[0] <= dt - timedelta(weeks = float(52.0/12.0*15.0)), hist_totequity_dict.get(sym,[]))
+    #     rev_list = filter(lambda y: y[0] > shift_back_n_months(dt,12+AUDIT_DELAY), filter(lambda x: x[0] <= shift_back_n_months(dt,AUDIT_DELAY), hist_revenue_dict.get(sym,[])))
+    #     cogs_list = filter(lambda y: y[0] > shift_back_n_months(dt,12+AUDIT_DELAY), filter(lambda x: x[0] <= shift_back_n_months(dt,AUDIT_DELAY), hist_cogs_dict.get(sym,[])))
+    #     intexp_list = filter(lambda y: y[0] > shift_back_n_months(dt,12+AUDIT_DELAY), filter(lambda x: x[0] <= shift_back_n_months(dt,AUDIT_DELAY), hist_intexp_dict.get(sym,[])))
+    #     operatingexp_list = filter(lambda y: y[0] > shift_back_n_months(dt,12+AUDIT_DELAY), filter(lambda x: x[0] <= shift_back_n_months(dt,AUDIT_DELAY), hist_operatingexp_dict.get(sym,[])))
+    #     totequity_list = filter(lambda x: x[0] <= shift_back_n_months(dt,12+AUDIT_DELAY), hist_totequity_dict.get(sym,[]))
     #
     #     rev = sum(map(lambda x: x[1], rev_list))
     #     cogs = sum(map(lambda x: x[1], cogs_list))
@@ -157,7 +178,7 @@ for dt in rebalance_date_list:
     op_dict = {}
     for sym in symbol_list:
         # after considering delay in financial reporting
-        roe_list = filter(lambda y: y[0] > dt - timedelta(weeks = float(52.0/12.0*15.0)), filter(lambda x: x[0] <= dt - timedelta(weeks = float(52.0/12.0*3.0)), hist_roe_dict.get(sym,[])))
+        roe_list = filter(lambda y: y[0] > shift_back_n_months(dt,12+AUDIT_DELAY), filter(lambda x: x[0] <= shift_back_n_months(dt,AUDIT_DELAY), hist_oper_roe_dict.get(sym,[])))
         if len(roe_list) >= 1:
             op_dict[sym] = roe_list[-1]
 
@@ -182,24 +203,88 @@ for dt in rebalance_date_list:
     if len(symbol_list) < min_no_of_avb_sym:
         continue
 
-    if config["general"]["expected_return_est_method"].lower() == "bp_roe":
-        est_roe_list = []
+    if config["general"]["expected_return_est_method"].lower() == "sunny":
+        expected_rtn_list = []
+        expected_rtn_asset_driver_list = []
+        expected_rtn_external_driver_list = []
         for sym in symbol_list:
-            est_roe = None
-            roe_list = filter(lambda y: y[0] > dt - timedelta(weeks = float(52.0/12.0*(12.0*5.0+3.0))), filter(lambda x: x[0] <= dt - timedelta(weeks = float(52.0/12.0*3.0)), hist_roe_dict.get(sym,[])))
-            roe_list = map(lambda x: x[1], roe_list)
-            if len(roe_list) >= 3:
-                m = float(sum(roe_list)) / float(len(roe_list))
-                sd = np.std(np.asarray(roe_list))
-                est_roe = m - float(config["general"]["expected_return_est_stdev"]) * sd
+            ###################################################
+            w_a,w_e = map(float, config["company_type"][sym])
+
+            ###################################################
+            # asset driver
+            ###################################################
+            conser_oper_roa = None
+
+            oper_roa_list = []
+            oper_incm_list = filter(lambda y: y[0] > shift_back_n_months(dt,12*5+AUDIT_DELAY), filter(lambda x: x[0] <= shift_back_n_months(dt,AUDIT_DELAY), hist_operincm_dict.get(sym,[])))
+            for oi_dt,oper_incm in oper_incm_list:
+                totasset_list = filter(lambda x: x[0] <= shift_back_n_months(oi_dt,6), hist_totasset_dict.get(sym,[]))
+                if len(totasset_list) > 0:
+                    oper_roa_list.append((oi_dt,oper_incm/totasset_list[-1][1]))
+
+            oper_roa_list = map(lambda x: x[1], oper_roa_list)
+
+            ###################################################
+            oper_date_list = map(lambda x: x[0], oper_incm_list)
+            if len(oper_date_list) >= 3:
+                annualization_factor = round(365.0/min(map(lambda x: (x[0]-x[1]).days, zip(oper_date_list[1:],oper_date_list[:-1]))),0)
             else:
-                est_roe = 0.0
-            est_roe_list.append(est_roe)
+                annualization_factor = 0.0
+            ###################################################
 
-        expected_rtn_list = map(lambda x: 0.5*x[0]*x[1]/100.0, zip(bp_list,est_roe_list))
+            if len(oper_roa_list) >= 5:
+                oper_roa_list = sorted(oper_roa_list)[1:][:-1]
+                m = sum(oper_roa_list)/len(oper_roa_list)
+                sd = np.std(np.asarray(calc_return_list(oper_roa_list)))
+                conser_oper_roa = annualization_factor * (m * (1 - float(config["general"]["roa_est_stdev"]) * sd))
+            else:
+                conser_oper_roa = 0.0
+
+            bps_list = filter(lambda x: x[0] <= shift_back_n_months(dt,AUDIT_DELAY), hist_bps_dict.get(sym,[]))
+            bps = bps_list[-1][1] if len(bps_list) > 0 else 0.0
+
+            costofdebt_list = filter(lambda x: x[0] <= shift_back_n_months(dt,AUDIT_DELAY), hist_costofdebt_dict.get(sym,[]))
+            totliabps_list = filter(lambda x: x[0] <= shift_back_n_months(dt,AUDIT_DELAY), hist_totliabps_dict.get(sym,[]))
+            if len(costofdebt_list) > 0 and len(totliabps_list) > 0:
+                iL = costofdebt_list[-1][1]/100.0 * totliabps_list[-1][1]
+            else:
+                iL = 0.0
+            if len(totliabps_list) > 0:
+                totliabps = totliabps_list[-1][1]
+            else:
+                totliabps = 0.0
+
+            stattaxrate_list = filter(lambda x: x[0] <= shift_back_n_months(dt,AUDIT_DELAY), hist_stattaxrate_dict.get(sym,[]))
+            if len(stattaxrate_list) > 0:
+                taxrate = stattaxrate_list[-1][1]
+            else:
+                taxrate = 0.0
+
+            expected_rtn_asset_driver_list.append(w_a * (1-taxrate)*(conser_oper_roa*(totliabps+bps)-iL)/hist_unadj_px_dict[dt][sym])
+
+            ###################################################
+            # external driver
+            ###################################################
+            oper_eps_list = filter(lambda y: y[0] > shift_back_n_months(dt,12*5+AUDIT_DELAY), filter(lambda x: x[0] <= shift_back_n_months(dt,AUDIT_DELAY), hist_oper_eps_dict.get(sym,[])))
+            oper_eps_list = map(lambda x: x[1], oper_eps_list)
+            oper_eps_pchg_list = map(lambda x: float(x[0]-x[1])/x[1], zip(oper_eps_list[1:],oper_eps_list[:-1]))
+            if len(oper_eps_pchg_list) >= 5:
+                oper_eps_pchg_list = sorted(oper_eps_pchg_list)[1:][:-1]
+                m = sum(oper_eps_pchg_list)/len(oper_eps_pchg_list)
+                sd = np.std(np.asarray(oper_eps_pchg_list))
+                oper_eps_list = map(lambda z: z[1], sorted(sorted(enumerate(oper_eps_list), key=lambda x: x[1])[1:][:-1], key=lambda y: y[0]))
+                conser_oper_eps = oper_eps_list[-1] * (1 + annualization_factor * (m - float(config["general"]["roa_est_stdev"]) * sd))
+            else:
+                conser_oper_eps = 0.0
+
+            expected_rtn_external_driver_list.append(w_e * (1-taxrate)*(conser_oper_eps-iL)/hist_unadj_px_dict[dt][sym])
+
+            expected_rtn_list = map(lambda x: x[0]+x[1], zip(expected_rtn_asset_driver_list,expected_rtn_external_driver_list))
     elif config["general"]["expected_return_est_method"].lower() == "bp":
-        expected_rtn_list = map(lambda x: x/100.0, bp_list)
+        expected_rtn_list = map(lambda x: x/100.0, bp_conservative_list)
 
+    # print str(dt) + ": " + ', '.join(map(lambda x: x[0]+":"+str(x[1]), zip(symbol_list,expected_rtn_list)))
     # print "expected_rtn_list: %s: %s" % (dt,'|'.join(map(lambda x: x[0]+":"+str(round(x[1],4)), sorted(zip(symbol_list,expected_rtn_list),key=lambda x: x[1]))))
 
     ###################################################
@@ -209,15 +294,16 @@ for dt in rebalance_date_list:
 
     ###################################################
     specific_riskiness_list = len(hedging_symbol_list+symbol_list) * [0.0]
-    hist_adj_px_list_fil = sorted(filter(lambda x: x[0] <= dt, hist_adj_px_list), key=lambda y: y[0])
-    hedging_sym_time_series_list = map(lambda s: map(lambda ts: (ts[0],ts[2]), filter(lambda h: h[1] == s, hist_adj_px_list_fil)), hedging_symbol_list)
-    sym_time_series_list = map(lambda s: map(lambda ts: (ts[0],ts[2]), filter(lambda x: x[1] == s, hist_adj_px_list_fil)), symbol_list)
+    hist_adj_px_list_fil_sorted = sorted(filter(lambda x: x[0] <= dt, hist_adj_px_list_sorted), key=lambda y: y[0])
+    hedging_sym_time_series_list = map(lambda s: map(lambda ts: (ts[0],ts[2]), filter(lambda h: h[1] == s, hist_adj_px_list_fil_sorted)), hedging_symbol_list)
+    sym_time_series_list         = map(lambda s: map(lambda ts: (ts[0],ts[2]), filter(lambda x: x[1] == s, hist_adj_px_list_fil_sorted)), symbol_list)
+
     aug_cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(hedging_sym_time_series_list+sym_time_series_list, specific_riskiness_list)
     cov_matrix = aug_cov_matrix
     for i in range(len(hedging_symbol_list)):
         cov_matrix = np.delete(cov_matrix, 0, 0)
         cov_matrix = np.delete(cov_matrix, 0, 1)
-    # print "cov %s" % (cov_matrix)
+    # print "aug_cov %s" % (aug_cov_matrix)
     ###################################################
 
     ###################################################
@@ -238,7 +324,7 @@ for dt in rebalance_date_list:
             if config["general"]["robust_optimization"].lower() == "true":
                 tmp_sol_list = markowitz_robust(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list, extract_sd_from_cov_matrix(cov_matrix))
             else:
-                tmp_sol_list = markowitz(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list)
+                tmp_sol_list = markowitz(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list, 0.0)
 
             if tmp_sol_list is None:
                 continue
@@ -287,7 +373,7 @@ for dt in rebalance_date_list:
     ###################################################
     # sell all existing pos
     ###################################################
-    cash += float(sum([hist_adj_px_dict[dt].get(s,filter(lambda x: x[1]==s, hist_adj_px_list)[-1][2])*pos for s,pos in pos_dict.items()]))
+    cash += float(sum([hist_adj_px_dict[dt].get(s,filter(lambda x: x[1]==s, hist_adj_px_list_sorted)[-1][2])*pos for s,pos in pos_dict.items()]))
     pos_dict = {}
     ###################################################
 
@@ -319,5 +405,5 @@ for dt in rebalance_date_list:
     ###################################################
     # print "mkt val of pos: %s" % sum([hist_adj_px_dict[dt][s]*pos for s,pos in pos_dict.items()])
     print str(dt)+","+str(round(cash,0))+","+','.join(map(str,map(lambda x: round(x,5), port_beta_list)))+","+most_correlated_idx_sym+","+str(round(h,5))+",["+str(len(sym_weight_dict))+"],"+','.join(map(lambda x: ':'.join(x), sym_px_weight_list))+','+",".join(map(lambda x: "pos_"+x[0]+'_'+str(x[1]), pos_dict.items()))
-    cash -= float(sum([hist_adj_px_dict[dt].get(s,filter(lambda x: x[1]==s, hist_adj_px_list)[-1][2])*pos for s,pos in pos_dict.items()]))
+    cash -= float(sum([hist_adj_px_dict[dt].get(s,filter(lambda x: x[1]==s, hist_adj_px_list_sorted)[-1][2])*pos for s,pos in pos_dict.items()]))
     ###################################################

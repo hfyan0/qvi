@@ -49,36 +49,37 @@ def calc_return_list(price_list):
 
 def calc_correl(ts_a,ts_b):
     common_date_set = set(map(lambda x: x[0], ts_a)).intersection(set(map(lambda x: x[0], ts_b)))
-    a_ext = map(lambda x: x[1], filter(lambda x: x[0] in common_date_set, ts_a))[-LOOKBACK_DAYS:]
-    b_ext = map(lambda x: x[1], filter(lambda x: x[0] in common_date_set, ts_b))[-LOOKBACK_DAYS:]
-    if len(a_ext) < 30 or len(b_ext) < 30:
-        return -1
-    else:
-        return round(np.corrcoef(calc_return_list(a_ext),calc_return_list(b_ext))[0][1],5)
+    if len(common_date_set) < 30:
+        return 1.0 # conservative
 
-def calc_var(ts):
-    r_ls = calc_return_list(ts)[-LOOKBACK_DAYS:]
-    n = len(r_ls)
-    m = float(sum(r_ls))/n
-    return sum(map(lambda x: math.pow(x-m,2), r_ls)) / float(n)
+    a_ext = map(lambda x: x[1], sorted(filter(lambda x: x[0] in common_date_set, ts_a), key=lambda x: x[0]))
+    b_ext = map(lambda x: x[1], sorted(filter(lambda x: x[0] in common_date_set, ts_b), key=lambda x: x[0]))
+    common_len = min(min(len(a_ext),len(b_ext)),LOOKBACK_DAYS)
+    a_ext = a_ext[-common_len:]
+    b_ext = b_ext[-common_len:]
+
+    return round(np.corrcoef(calc_return_list(a_ext),calc_return_list(b_ext))[0][1],5)
 
 def calc_sd(ts):
     if len(ts) < 30:
         return 9999.9
     else:
-        return math.sqrt(calc_var(ts))
+        r_ls = calc_return_list(ts)[-LOOKBACK_DAYS:]
+        return np.std(np.asarray(r_ls))
 
 def get_annualization_factor(date_list):
     if len(date_list) < 30:
         return 9999.9
     else:
         min_diff = min(map(lambda x: (x[0]-x[1]).days, zip(date_list[1:],date_list[:-1])))
-        if min_diff == 1:
+        if min_diff <= 4:
             return 252
-        elif min_diff == 7:
+        elif min_diff >= 5 and min_diff <= 7:
             return 52
-        else:
+        elif min_diff >= 20 and min_diff <= 31:
             return 12
+        else:
+            return 252
 
 def calc_cov_matrix_annualized(sym_time_series_list, specific_riskiness_list):
     ###################################################
@@ -117,9 +118,6 @@ def calc_cov_matrix_annualized(sym_time_series_list, specific_riskiness_list):
     # print "correl_matrix: %s" % str(correl_matrix)
     # print "cov_matrix: %s" % str(D*correl_matrix*D)
     return ((D * correl_matrix * D),annualized_sd_list,annualized_adj_sd_list)
-
-def calc_mean_vec(sym_time_series_list):
-    return map(lambda ts: sum(map(lambda x: x[1], ts))/len(ts), sym_time_series_list)
 
 def extract_sd_from_cov_matrix(cov_matrix):
     return map(lambda x: math.sqrt(x), np.diag(cov_matrix).tolist())
