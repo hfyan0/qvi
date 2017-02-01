@@ -51,14 +51,13 @@ hist_unadj_px_dict = get_hist_data_key_date(config["hist_data"]["hist_unadj_px"]
 hist_bps_dict = get_hist_data_key_sym(config["hist_data"]["hist_bps"])
 hist_totasset_dict = get_hist_data_key_sym(config["hist_data"]["hist_totasset"])
 hist_totequity_dict = get_hist_data_key_sym(config["hist_data"]["hist_totequity"])
-hist_intexp_dict = get_hist_data_key_sym(config["hist_data"]["hist_intexp"])
+# hist_intexp_dict = get_hist_data_key_sym(config["hist_data"]["hist_intexp"])
 hist_operatingexp_dict = get_hist_data_key_sym(config["hist_data"]["hist_operatingexp"])
-hist_cogs_dict = get_hist_data_key_sym(config["hist_data"]["hist_cogs"])
-hist_revenue_dict = get_hist_data_key_sym(config["hist_data"]["hist_revenue"])
-hist_mktcap_dict = get_hist_data_key_sym(config["hist_data"]["hist_mktcap"])
-hist_oper_roe_dict = get_hist_data_key_sym(config["hist_data"]["hist_oper_roe"])
+# hist_cogs_dict = get_hist_data_key_sym(config["hist_data"]["hist_cogs"])
+# hist_revenue_dict = get_hist_data_key_sym(config["hist_data"]["hist_revenue"])
+# hist_mktcap_dict = get_hist_data_key_sym(config["hist_data"]["hist_mktcap"])
+# hist_oper_roe_dict = get_hist_data_key_sym(config["hist_data"]["hist_oper_roe"])
 hist_oper_eps_dict = get_hist_data_key_sym(config["hist_data"]["hist_oper_eps"])
-hist_eqytoast_dict = get_hist_data_key_sym(config["hist_data"]["hist_eqytoast"])
 hist_stattaxrate_dict = get_hist_data_key_sym(config["hist_data"]["hist_stattaxrate"])
 hist_operincm_dict = get_hist_data_key_sym(config["hist_data"]["hist_operincm"])
 hist_costofdebt_dict = get_hist_data_key_sym(config["hist_data"]["hist_costofdebt"])
@@ -89,113 +88,35 @@ for dt in rebalance_date_list:
     symbol_list = filter(lambda x: x in hist_adj_px_dict[dt], symbol_list)
     symbol_list = filter(lambda x: x in hist_unadj_px_dict[dt], symbol_list)
     symbol_list = filter(lambda x: x in hist_bps_dict, symbol_list)
-    symbol_list = filter(lambda x: x in hist_oper_roe_dict, symbol_list)
     symbol_list = filter(lambda x: x in hist_totasset_dict, symbol_list)
-    symbol_list = filter(lambda x: x in hist_mktcap_dict, symbol_list)
 
     ###################################################
     # book-to-price
     # asset-to-price
     ###################################################
     bp_list = []
-    bp_conservative_list = []
+    conser_bp_list = []
+    conser_bp_dict = {}
     for sym in symbol_list:
-        bps_list = map(lambda z: z[1], filter(lambda y: y[0] > shift_back_n_months(dt,36+AUDIT_DELAY), filter(lambda x: x[0] <= shift_back_n_months(dt,AUDIT_DELAY), hist_bps_dict[sym])))
+        bps_list = map(lambda z: z[1], filter(lambda y: y[0] > shift_back_n_months(dt,5*12+AUDIT_DELAY), filter(lambda x: x[0] <= shift_back_n_months(dt,AUDIT_DELAY), hist_bps_dict[sym])))
         ###################################################
-        if len(bps_list) >= 3:
-            sd = np.std(np.asarray(calc_return_list(bps_list)))
-            bp_conservative_list.append((bps_list[-1] - float(config["general"]["bp_stdev"]) * sd * bps_list[-1]) / hist_unadj_px_dict[dt][sym])
-        elif len(bps_list) > 0:
-            bp_conservative_list.append(bps_list[-1] / hist_unadj_px_dict[dt][sym])
+        if len(bps_list) >= 5:
+            bps_r = calc_return_list(bps_list)
+            bps_r = bps_r[1:][:-1]
+            m = sum(bps_r)/len(bps_r)
+            sd = np.std(np.asarray(bps_r))
+            conser_bp = bps_list[-1] * (1 + m - float(config["general"]["bp_stdev"]) * sd) / hist_unadj_px_dict[dt][sym]
+            conser_bp_list.append(conser_bp)
+            conser_bp_dict[sym] = conser_bp
         else:
-            bp_conservative_list.append(0.0)
+            conser_bp_list.append(0.0)
+            conser_bp_dict[sym] = 0.0
         ###################################################
         if len(bps_list) > 0:
             bp_list.append(bps_list[-1] / hist_unadj_px_dict[dt][sym])
         else:
             bp_list.append(0.0)
         ###################################################
-
-    ###################################################
-    # Size
-    ###################################################
-    mktcap_dict = {}
-    for sym in symbol_list:
-        mktcap_list = filter(lambda x: x[0] <= dt, hist_mktcap_dict[sym])
-        if len(mktcap_list) >= 1:
-            mktcap_dict[sym] = mktcap_list[-1]
-    if config["general"]["SML"].lower() == "true":
-        smallcap_sym_list = map(lambda y: y[0], sorted(mktcap_dict.items(),key=lambda x: x[1]))[-int(float(config["general"]["fama_french_size_proportion"])*len(mktcap_dict)):]
-    else:
-        smallcap_sym_list = map(lambda y: y[0], sorted(mktcap_dict.items(),key=lambda x: x[1]))[:int(float(config["general"]["fama_french_size_proportion"])*len(mktcap_dict))]
-
-    ###################################################
-    # Investment
-    ###################################################
-    asset_growth_dict = {}
-    for sym in symbol_list:
-        # after considering delay in financial reporting
-        totasset_list = filter(lambda y: y[0] > shift_back_n_months(dt,12+AUDIT_DELAY), filter(lambda x: x[0] <= shift_back_n_months(dt,AUDIT_DELAY), hist_totasset_dict[sym]))
-        if len(totasset_list) >= 2:
-            asset_growth = totasset_list[-1][1] / totasset_list[0][1]
-            asset_growth_dict[sym] = asset_growth
-    if config["general"]["CMA"].lower() == "true":
-        conservative_sym_list = map(lambda y: y[0], sorted(asset_growth_dict.items(),key=lambda x: x[1]))[:int(float(config["general"]["fama_french_conser_proportion"])*len(asset_growth_dict))]
-    else:
-        conservative_sym_list = map(lambda y: y[0], sorted(asset_growth_dict.items(),key=lambda x: x[1]))[-int(float(config["general"]["fama_french_conser_proportion"])*len(asset_growth_dict)):]
-
-    # print "asset_growth_dict: %s" % sorted(asset_growth_dict.items(), key=lambda x: x[1])
-    # print "conservative_sym_list: %s" % conservative_sym_list
-
-    # ###################################################
-    # # Operating Profitability
-    # ###################################################
-    # op_dict = {}
-    # for sym in symbol_list:
-    #     # after considering delay in financial reporting
-    #     rev_list = filter(lambda y: y[0] > shift_back_n_months(dt,12+AUDIT_DELAY), filter(lambda x: x[0] <= shift_back_n_months(dt,AUDIT_DELAY), hist_revenue_dict.get(sym,[])))
-    #     cogs_list = filter(lambda y: y[0] > shift_back_n_months(dt,12+AUDIT_DELAY), filter(lambda x: x[0] <= shift_back_n_months(dt,AUDIT_DELAY), hist_cogs_dict.get(sym,[])))
-    #     intexp_list = filter(lambda y: y[0] > shift_back_n_months(dt,12+AUDIT_DELAY), filter(lambda x: x[0] <= shift_back_n_months(dt,AUDIT_DELAY), hist_intexp_dict.get(sym,[])))
-    #     operatingexp_list = filter(lambda y: y[0] > shift_back_n_months(dt,12+AUDIT_DELAY), filter(lambda x: x[0] <= shift_back_n_months(dt,AUDIT_DELAY), hist_operatingexp_dict.get(sym,[])))
-    #     totequity_list = filter(lambda x: x[0] <= shift_back_n_months(dt,12+AUDIT_DELAY), hist_totequity_dict.get(sym,[]))
-    #
-    #     rev = sum(map(lambda x: x[1], rev_list))
-    #     cogs = sum(map(lambda x: x[1], cogs_list))
-    #     intexp = sum(map(lambda x: x[1], intexp_list))
-    #     operatingexp = sum(map(lambda x: x[1], operatingexp_list))
-    #     totequity = totequity_list[-1][1] if len(totequity_list) >= 1 else 0.0
-    #     if abs(totequity) > 0.01:
-    #         op_dict[sym] = (rev - cogs - operatingexp - intexp) / totequity
-    #
-    # # print "op_dict: %s" % sorted(op_dict.items(), key=lambda x: x[1])
-    # high_op_sym_list = map(lambda y: y[0], sorted(op_dict.items(),key=lambda x: x[1]))[-int(float(config["general"]["fama_french_op_proportion"])*len(op_dict)):]
-    #
-    # # print "high_op_sym_list: %s" % high_op_sym_list
-
-    ###################################################
-    # Operating Profitability
-    ###################################################
-    op_dict = {}
-    for sym in symbol_list:
-        # after considering delay in financial reporting
-        roe_list = filter(lambda y: y[0] > shift_back_n_months(dt,12+AUDIT_DELAY), filter(lambda x: x[0] <= shift_back_n_months(dt,AUDIT_DELAY), hist_oper_roe_dict.get(sym,[])))
-        if len(roe_list) >= 1:
-            op_dict[sym] = roe_list[-1]
-
-    if config["general"]["RMW"].lower() == "true":
-        high_op_sym_list = map(lambda y: y[0], sorted(op_dict.items(),key=lambda x: x[1]))[-int(float(config["general"]["fama_french_op_proportion"])*len(op_dict)):]
-    else:
-        high_op_sym_list = map(lambda y: y[0], sorted(op_dict.items(),key=lambda x: x[1]))[:int(float(config["general"]["fama_french_op_proportion"])*len(op_dict))]
-
-    ###################################################
-    if float(config["general"]["fama_french_size_proportion"]) >= 0.0:
-        symbol_list = filter(lambda x: x in smallcap_sym_list, symbol_list)
-
-    if float(config["general"]["fama_french_op_proportion"]) >= 0.0:
-        symbol_list = filter(lambda x: x in high_op_sym_list, symbol_list)
-
-    if float(config["general"]["fama_french_conser_proportion"]) >= 0.0:
-        symbol_list = filter(lambda x: x in conservative_sym_list, symbol_list)
 
     ###################################################
     # check whether we have enough stocks to choose from
@@ -207,9 +128,13 @@ for dt in rebalance_date_list:
         expected_rtn_list = []
         expected_rtn_asset_driver_list = []
         expected_rtn_external_driver_list = []
+        expected_rtn_bproe_list = []
         for sym in symbol_list:
             ###################################################
-            w_a,w_e = map(float, config["company_type"][sym])
+            w_a_,w_e_,w_b_ = map(float, config["expected_rtn_ast_ext_bv"][sym])
+            w_a = w_a_/sum([w_a_,w_e_,w_b_])
+            w_e = w_e_/sum([w_a_,w_e_,w_b_])
+            w_b = w_b_/sum([w_a_,w_e_,w_b_])
 
             ###################################################
             # asset driver
@@ -279,10 +204,12 @@ for dt in rebalance_date_list:
                 conser_oper_eps = 0.0
 
             expected_rtn_external_driver_list.append(w_e * (1-taxrate)*(conser_oper_eps-iL)/hist_unadj_px_dict[dt][sym])
+            expected_rtn_bproe_list.append(w_b * float(config["general"]["typical_roe"])*conser_bp_dict[sym])
 
-            expected_rtn_list = map(lambda x: x[0]+x[1], zip(expected_rtn_asset_driver_list,expected_rtn_external_driver_list))
+        expected_rtn_list = map(lambda x: sum(x), zip(expected_rtn_asset_driver_list,expected_rtn_external_driver_list,expected_rtn_bproe_list))
+
     elif config["general"]["expected_return_est_method"].lower() == "bp":
-        expected_rtn_list = map(lambda x: x/100.0, bp_conservative_list)
+        expected_rtn_list = map(lambda x: x/100.0, conser_bp_list)
 
     # print str(dt) + ": " + ', '.join(map(lambda x: x[0]+":"+str(x[1]), zip(symbol_list,expected_rtn_list)))
     # print "expected_rtn_list: %s: %s" % (dt,'|'.join(map(lambda x: x[0]+":"+str(round(x[1],4)), sorted(zip(symbol_list,expected_rtn_list),key=lambda x: x[1]))))
