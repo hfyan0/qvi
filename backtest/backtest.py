@@ -227,7 +227,7 @@ for dt in rebalance_date_list:
     elif config["general"]["expected_return_est_method"].lower() == "bp":
         expected_rtn_list = map(lambda x: x/100.0, conser_bp_ratio_list)
 
-    print str(dt) + ": " + ', '.join(map(lambda x: x[0]+":["+str(round(x[1],3))+"]:a_"+str(round(x[2],3))+";e_"+str(round(x[3],3))+";b_"+str(round(x[4],3)), zip(symbol_list,expected_rtn_list,expected_rtn_asset_driver_list,expected_rtn_external_driver_list,expected_rtn_bv_list)))
+    # print str(dt) + ": " + ', '.join(map(lambda x: x[0]+":["+str(round(x[1],3))+"]:a_"+str(round(x[2],3))+";e_"+str(round(x[3],3))+";b_"+str(round(x[4],3)), zip(symbol_list,expected_rtn_list,expected_rtn_asset_driver_list,expected_rtn_external_driver_list,expected_rtn_bv_list)))
 
     ###################################################
     max_weight_list = map(lambda x: float(max_weight_dict.get(x,max_weight_dict["default"])), symbol_list)
