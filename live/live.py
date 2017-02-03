@@ -7,7 +7,7 @@ import numpy as np
 
 import os
 sys.path.append(os.path.dirname(sys.path[0]))
-from mvo import calc_cov_matrix_annualized,conv_to_hkd,intWithCommas,justify_str,markowitz,markowitz_robust,log_optimal_growth,read_file
+from mvo import CurrencyConverter,calc_cov_matrix_annualized,intWithCommas,justify_str,markowitz,markowitz_robust,log_optimal_growth,read_file
 
 ###################################################
 config = ConfigObj('config.ini')
@@ -41,6 +41,7 @@ for i in range(len(hedging_symbol_list)):
     cov_matrix = np.delete(cov_matrix, 0, 0)
     cov_matrix = np.delete(cov_matrix, 0, 1)
 
+curcy_converter = CurrencyConverter(config["currency_rate"])
 ###################################################
 # current positions
 ###################################################
@@ -48,7 +49,7 @@ current_pos_list = read_file(config["general"]["current_positions"])
 cur_px_dict = dict(map(lambda x: (x[0],float(x[1])), read_file(config["general"]["current_prices"])))
 current_mkt_val_dict = {}
 if len(current_pos_list) > 0:
-    current_mkt_val_dict = dict(map(lambda x: (x[0],conv_to_hkd(x[1],cur_px_dict[x[0]]*float(x[2]))), current_pos_list))
+    current_mkt_val_dict = dict(map(lambda x: (x[0],curcy_converter.conv_to_hkd(x[1],datetime.now().date(),cur_px_dict[x[0]]*float(x[2]))), current_pos_list))
     current_weight_dict = dict(map(lambda s: (s,current_mkt_val_dict[s]/sum(current_mkt_val_dict.values())), current_mkt_val_dict.keys()))
     current_weight_list = map(lambda s: current_weight_dict.get(s,0.0), symbol_list)
 
@@ -86,7 +87,7 @@ markowitz_max_kelly_f_sol_list = []
 if float(config["general"]["markowitz_max_kelly_f_weight"] > 0.0) or float(config["general"]["markowitz_max_sharpe_weight"] > 0.0):
     for i in range(N):
         mu_p = from_tgt_rtn + (to_tgt_rtn - from_tgt_rtn) * float(i)/float(N)
-        tmp_sol_list = markowitz(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list, float(config["general"]["min_expected_return"]), float(config["general"]["portfolio_change_inertia"]), float(config["general"]["hatred_for_small_size"]), current_weight_list)
+        tmp_sol_list = markowitz(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list, float(config["general"]["min_expected_return"]), [], 1.0, float(config["general"]["portfolio_change_inertia"]), float(config["general"]["hatred_for_small_size"]), current_weight_list)
         # tmp_sol_list = markowitz_robust(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list, expected_rtn_uncertainty_list, float(config["general"]["portfolio_change_inertia"]), float(config["general"]["hatred_for_small_size"]), current_weight_list)
 
         if tmp_sol_list is None:
@@ -112,7 +113,7 @@ if float(config["general"]["markowitz_max_kelly_f_weight"] > 0.0) or float(confi
 ###################################################
 log_optimal_sol_list = []
 if float(config["general"]["log_optimal_growth_weight"]) > 0.0:
-    tmp_sol_list = log_optimal_growth(symbol_list, expected_rtn_list, cov_matrix, max_weight_list, float(config["general"]["portfolio_change_inertia"]), float(config["general"]["hatred_for_small_size"]), current_weight_list)
+    tmp_sol_list = log_optimal_growth(symbol_list, expected_rtn_list, cov_matrix, max_weight_list, [], 1.0, float(config["general"]["portfolio_change_inertia"]), float(config["general"]["hatred_for_small_size"]), current_weight_list)
     if tmp_sol_list is None:
         print "Failed to find solution."
         sys.exit(0)
