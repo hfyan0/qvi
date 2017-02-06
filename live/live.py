@@ -7,14 +7,18 @@ import numpy as np
 
 import os
 sys.path.append(os.path.dirname(sys.path[0]))
-from mvo import CurrencyConverter,calc_cov_matrix_annualized,intWithCommas,justify_str,markowitz,markowitz_robust,log_optimal_growth,read_file
+from mvo import CurrencyConverter,calc_cov_matrix_annualized,intWithCommas,justify_str,\
+                markowitz,markowitz_robust,log_optimal_growth,read_file,calc_expected_return,\
+                get_hist_data_key_sym,get_industry_groups,preprocess_industry_groups
 
 ###################################################
 config = ConfigObj('config.ini')
+config_common = ConfigObj(config["general"]["common_config"])
 
+print "Start reading data..."
 symbol_list = sorted([ i for k in map(lambda x: config["general"][x] if isinstance(config["general"][x], (list, tuple)) else [config["general"][x]], filter(lambda x: "traded_symbols" in x, config["general"].keys())) for i in k ])
 hedging_symbol_list = config["general"]["hedging_symbols"]
-specific_riskiness_list = len(hedging_symbol_list) * [0.0] + map(lambda s: float(config["specific_riskiness"].get(s,0)), symbol_list)
+specific_riskiness_list = len(hedging_symbol_list) * [0.0] + map(lambda s: float(config["specific_riskiness"].get(s,0.0)), symbol_list)
 
 ###################################################
 # read time series of prices
@@ -27,12 +31,36 @@ if len(insufficient_data_list) > 0:
     print "Insufficient data:"
     print '\n'.join(insufficient_data_list)
 
-expected_rtn_dict = dict(map(lambda x: (x[0],float(x[1])), read_file(config["general"]["expected_return_file"])))
-expected_rtn_list = map(lambda s: expected_rtn_dict.get(s,0.0), symbol_list)
+cur_px_dict = dict(map(lambda x: (x[0],float(x[1])), read_file(config["general"]["current_prices"])))
+hist_unadj_px_dict = {}
+hist_unadj_px_dict[datetime.now().date()] = cur_px_dict
+###################################################
+# deprecated
+###################################################
+# expected_rtn_dict = dict(map(lambda x: (x[0],float(x[1])), read_file(config["general"]["expected_return_file"])))
+# expected_rtn_list = map(lambda s: expected_rtn_dict.get(s,0.0), symbol_list)
 
-# expected_rtn_uncertainty_dict = config["expected_return_uncertainty"]
-# expected_rtn_uncertainty_list = map(lambda s: float(expected_rtn_uncertainty_dict[s]), symbol_list)
+hist_bps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_bps"])
+hist_totasset_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_totasset"])
+hist_oper_eps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_oper_eps"])
+hist_roa_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_roa"])
+hist_stattaxrate_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_stattaxrate"])
+hist_operincm_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_operincm"])
+hist_costofdebt_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_costofdebt"])
+hist_totliabps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_totliabps"])
 
+###################################################
+industry_groups_list = get_industry_groups(preprocess_industry_groups(config_common["industry_group"]))
+
+###################################################
+print "Start calculating expected return..."
+expected_rtn_list = calc_expected_return(config_common,datetime.now().date(),symbol_list,hist_bps_dict,hist_unadj_px_dict,hist_operincm_dict,hist_totasset_dict,hist_totliabps_dict,hist_costofdebt_dict,hist_stattaxrate_dict,hist_oper_eps_dict,hist_roa_dict)
+expected_rtn_dict = dict(map(lambda x: tuple(x), zip(symbol_list,expected_rtn_list)))
+
+print "Expected return:"
+print '\n'.join(map(lambda x: justify_str(x[0],5)+": "+justify_str(round(x[1]*100,2),8)+" %", sorted(expected_rtn_dict.items(),key=lambda x: x[1],reverse=True)))
+
+###################################################
 aug_cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(sym_time_series_list, specific_riskiness_list)
 print "Abnormal stdev to check:"
 print '\n'.join(map(lambda ss: ": ".join(map(str, ss)) + " %", filter(lambda x: (x[1] > 50.0) or (x[1] < 10.0), zip(hedging_symbol_list+symbol_list,map(lambda x: round(x*100.0,2), annualized_sd_list)))))
@@ -41,12 +69,11 @@ for i in range(len(hedging_symbol_list)):
     cov_matrix = np.delete(cov_matrix, 0, 0)
     cov_matrix = np.delete(cov_matrix, 0, 1)
 
-curcy_converter = CurrencyConverter(config["currency_rate"])
+curcy_converter = CurrencyConverter(config_common["currency_rate"])
 ###################################################
 # current positions
 ###################################################
 current_pos_list = read_file(config["general"]["current_positions"])
-cur_px_dict = dict(map(lambda x: (x[0],float(x[1])), read_file(config["general"]["current_prices"])))
 current_mkt_val_dict = {}
 if len(current_pos_list) > 0:
     current_mkt_val_dict = dict(map(lambda x: (x[0],curcy_converter.conv_to_hkd(x[1],datetime.now().date(),cur_px_dict[x[0]]*float(x[2]))), current_pos_list))
@@ -77,7 +104,7 @@ from_tgt_rtn = min(expected_rtn_list)
 to_tgt_rtn = max(expected_rtn_list)
 
 max_weight_dict = config["max_weight"]
-max_weight_list = map(lambda x: float(max_weight_dict.get(x,1.0)), symbol_list)
+max_weight_list = map(lambda x: float(max_weight_dict.get(x,max_weight_dict["single_name"])), symbol_list)
 
 N = int(config["general"]["granularity"])
 
@@ -87,7 +114,7 @@ markowitz_max_kelly_f_sol_list = []
 if float(config["general"]["markowitz_max_kelly_f_weight"] > 0.0) or float(config["general"]["markowitz_max_sharpe_weight"] > 0.0):
     for i in range(N):
         mu_p = from_tgt_rtn + (to_tgt_rtn - from_tgt_rtn) * float(i)/float(N)
-        tmp_sol_list = markowitz(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list, float(config["general"]["min_expected_return"]), [], 1.0, float(config["general"]["portfolio_change_inertia"]), float(config["general"]["hatred_for_small_size"]), current_weight_list)
+        tmp_sol_list = markowitz(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list, float(config["general"]["min_expected_return"]), industry_groups_list, float(config["max_weight"]["industry"]), float(config["general"]["portfolio_change_inertia"]), float(config["general"]["hatred_for_small_size"]), current_weight_list)
         # tmp_sol_list = markowitz_robust(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list, expected_rtn_uncertainty_list, float(config["general"]["portfolio_change_inertia"]), float(config["general"]["hatred_for_small_size"]), current_weight_list)
 
         if tmp_sol_list is None:
@@ -113,7 +140,7 @@ if float(config["general"]["markowitz_max_kelly_f_weight"] > 0.0) or float(confi
 ###################################################
 log_optimal_sol_list = []
 if float(config["general"]["log_optimal_growth_weight"]) > 0.0:
-    tmp_sol_list = log_optimal_growth(symbol_list, expected_rtn_list, cov_matrix, max_weight_list, [], 1.0, float(config["general"]["portfolio_change_inertia"]), float(config["general"]["hatred_for_small_size"]), current_weight_list)
+    tmp_sol_list = log_optimal_growth(symbol_list, expected_rtn_list, cov_matrix, max_weight_list, industry_groups_list, float(config["max_weight"]["industry"]), float(config["general"]["portfolio_change_inertia"]), float(config["general"]["hatred_for_small_size"]), current_weight_list)
     if tmp_sol_list is None:
         print "Failed to find solution."
         sys.exit(0)
@@ -205,10 +232,11 @@ sym_sol_list = map(lambda x: x[0], sorted(sym_sol_list_with_diff, reverse=True, 
 ###################################################
 # solution
 ###################################################
-header = "   Symbol:      Price         E[r] %         Beta     Beta      w %     Amount (HKD)  |      Current  |         Diff  |  Symbol"
+header = "   Symbol:  Indus     Price         E[r] %         Beta     Beta      w %     Amount (HKD)  |      Current  |         Diff  |  Symbol"
 columns = []
 columns.append(map(lambda x: justify_str(x[0],9), sym_sol_list))
 columns.append(map(lambda x: ": ", sym_sol_list))
+columns.append(map(lambda x: justify_str(industry_groups_dict.get(x[0],"---"),6), sym_sol_list))
 columns.append(map(lambda x: justify_str(cur_px_dict.get(x[0],"---"),10), sym_sol_list))
 columns.append(map(lambda x: "   ", sym_sol_list))
 columns.append(map(lambda x: justify_str(round(expected_rtn_dict[x[0]]*100,2),10), sym_sol_list))
@@ -229,5 +257,5 @@ columns.append(map(lambda x: justify_str(x[0],5), sym_sol_list))
 print
 print "Target portfolio:"
 
-targetportdetails_list=[header]+map(lambda x: ''.join(x), zip(columns[0],columns[1],columns[2],columns[3],columns[4],columns[5],columns[6],columns[7],columns[8],columns[9],columns[10],columns[11],columns[12],columns[13],columns[14],columns[15],columns[16],columns[17],columns[18]))
+targetportdetails_list=[header]+map(lambda x: ''.join(x), zip(columns[0],columns[1],columns[2],columns[3],columns[4],columns[5],columns[6],columns[7],columns[8],columns[9],columns[10],columns[11],columns[12],columns[13],columns[14],columns[15],columns[16],columns[17],columns[18],columns[19]))
 print '\n'.join(map(lambda x: justify_str(x[0],5)+")"+x[1], enumerate(targetportdetails_list)))

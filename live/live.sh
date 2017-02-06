@@ -33,5 +33,5 @@ else
 fi
 
 cd $LIVE_FOLDER
-python calc_expected_return.py
+# python calc_expected_return.py
 python live.py | grep -v Terminated 2>&1

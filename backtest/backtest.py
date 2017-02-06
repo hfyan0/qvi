@@ -10,13 +10,18 @@ from itertools import groupby
 import os
 sys.path.append(os.path.dirname(sys.path[0]))
 from mvo import calc_cov_matrix_annualized,intWithCommas,justify_str,markowitz,markowitz_robust,log_optimal_growth,\
-                read_file,extract_sd_from_cov_matrix,calc_return_list,get_hist_data_key_date,get_hist_data_key_sym,calc_expected_return
+                read_file,extract_sd_from_cov_matrix,calc_return_list,get_hist_data_key_date,get_hist_data_key_sym,calc_expected_return,\
+                get_industry_groups,preprocess_industry_groups
 
 ###################################################
 AUDIT_DELAY = 3.0
 ###################################################
 config = ConfigObj('config.ini')
 config_common = ConfigObj(config["general"]["common_config"])
+
+print "config," + str(config["general"]["init_capital"]) + "," + ','.join(map(lambda x: ":".join(map(str, x)), (config["general"].items()+config_common["general"].items()+config["max_weight"].items())))
+
+###################################################
 traded_symbol_set = set(config["general"]["traded_symbols"])
 traded_symbol_list = sorted(config["general"]["traded_symbols"])
 hedging_symbol_list = config["general"]["hedging_symbols"]
@@ -36,26 +41,23 @@ dow_constituents_list = sorted(map(lambda x: (datetime.strptime(x[0],"%Y-%m-%d")
 # hist_revenue_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_revenue"])
 # hist_mktcap_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_mktcap"])
 # hist_oper_roe_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_oper_roe"])
+# hist_totequity_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_totequity"])
+# hist_operatingexp_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_operatingexp"])
 hist_adj_px_dict = get_hist_data_key_date(config_common["hist_data"]["hist_adj_px"])
 hist_adj_px_list_sorted = sorted(list(set(map(lambda x: (datetime.strptime(x[0],"%Y-%m-%d").date(),x[1],float(x[2])), read_file(config_common["hist_data"]["hist_adj_px"])))),key=lambda y: y[0])
 hist_unadj_px_dict = get_hist_data_key_date(config_common["hist_data"]["hist_unadj_px"])
+
 hist_bps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_bps"])
 hist_totasset_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_totasset"])
-hist_totequity_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_totequity"])
-hist_operatingexp_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_operatingexp"])
 hist_oper_eps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_oper_eps"])
+hist_roa_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_roa"])
 hist_stattaxrate_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_stattaxrate"])
 hist_operincm_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_operincm"])
 hist_costofdebt_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_costofdebt"])
 hist_totliabps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_totliabps"])
 
 ###################################################
-# industry groups
-###################################################
-industry_groups_list = []
-for grp, it_lstup in groupby(sorted(config_common["industry_group"].items(), key=lambda x: x[1]), lambda x: x[1]):
-    industry_groups_list.append(set(map(lambda x: x[0], list(it_lstup))))
-# print industry_groups_list
+industry_groups_list = get_industry_groups(preprocess_industry_groups(config_common["industry_group"]))
 
 ###################################################
 start_date = datetime.strptime(config["general"]["start_date"],"%Y-%m-%d").date()
@@ -82,7 +84,7 @@ for dt in rebalance_date_list:
     if len(symbol_list) < min_no_of_avb_sym:
         continue
 
-    expected_rtn_list = calc_expected_return(config_common,dt,symbol_list,hist_bps_dict,hist_unadj_px_dict,hist_operincm_dict,hist_totasset_dict,hist_totliabps_dict,hist_costofdebt_dict,hist_stattaxrate_dict,hist_oper_eps_dict,AUDIT_DELAY)
+    expected_rtn_list = calc_expected_return(config_common,dt,symbol_list,hist_bps_dict,hist_unadj_px_dict,hist_operincm_dict,hist_totasset_dict,hist_totliabps_dict,hist_costofdebt_dict,hist_stattaxrate_dict,hist_oper_eps_dict,hist_roa_dict,AUDIT_DELAY)
 
     # print str(dt) + ": " + ', '.join(map(lambda x: x[0]+":["+str(round(x[1],3))+"]:a_"+str(round(x[2],3))+";e_"+str(round(x[3],3))+";b_"+str(round(x[4],3)), zip(symbol_list,expected_rtn_list,expected_rtn_asset_driver_list,expected_rtn_external_driver_list,expected_rtn_bv_list)))
 
@@ -109,7 +111,6 @@ for dt in rebalance_date_list:
     if config["general"]["construction_method"] == "log_optimal_growth":
         log_optimal_sol_list = log_optimal_growth(symbol_list, expected_rtn_list, cov_matrix, max_weight_list, industry_groups_list, float(config["max_weight"]["industry"]))
         if log_optimal_sol_list is None:
-            print "shit"
             continue
         log_optimal_sol_list = list(log_optimal_sol_list["result"]['x'])
     ###################################################
@@ -200,6 +201,9 @@ for dt in rebalance_date_list:
         pos_dict[most_correlated_idx_sym] = -h * capital_to_use / hist_adj_px_dict[dt][most_correlated_idx_sym]
     elif config["general"]["hedging_type"].lower() == "smart":
         h = min(max(port_beta_list[most_correlated_idx_idx] - hsi_expected_return / 100.0 / 0.7, 0.0), 1.0)
+        pos_dict[most_correlated_idx_sym] = -h * capital_to_use / hist_adj_px_dict[dt][most_correlated_idx_sym]
+    elif config["general"]["hedging_type"].lower() == "half":
+        h = 0.5
         pos_dict[most_correlated_idx_sym] = -h * capital_to_use / hist_adj_px_dict[dt][most_correlated_idx_sym]
     ###################################################
     # print "mkt val of pos: %s" % sum([hist_adj_px_dict[dt][s]*pos for s,pos in pos_dict.items()])

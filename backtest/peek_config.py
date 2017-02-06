@@ -17,11 +17,6 @@ def justify_str(s,totlen,left_right="right",padchar=' '):
         return s
 
 backtest_data=read_file(sys.argv[1])
-backtest_data=filter(lambda x: "config" not in x[0], backtest_data)
+backtest_data=filter(lambda x: "config" in x[0], backtest_data)
 
-dt_sym_pos_dict = dict(map(lambda x: (x[0],dict(map(lambda s: (s.split(':')[0],float(s.split(':')[2])), filter(lambda x: "pos" not in x, x[7:])))), backtest_data))
-
-for dt,sym_pos_dict in sorted(dt_sym_pos_dict.items()):
-    print
-    print dt
-    print '\n'.join(map(lambda x: justify_str(round(x[1],3),8)+": "+x[0], sorted(filter(lambda x: x[1] > 0.001, sym_pos_dict.items()), key=lambda y: y[1], reverse=True)))
+print '\n'.join(map(lambda x: x[:200], filter(lambda x: ":" in x, backtest_data[0])))
