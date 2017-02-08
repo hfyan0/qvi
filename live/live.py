@@ -12,6 +12,10 @@ from mvo import CurrencyConverter,calc_cov_matrix_annualized,intWithCommas,justi
                 get_hist_data_key_sym,get_industry_groups,preprocess_industry_groups
 
 ###################################################
+time_check = datetime.now()
+time_check_printout = ["Time taken:"]
+
+###################################################
 config = ConfigObj('config.ini')
 config_common = ConfigObj(config["general"]["common_config"])
 
@@ -23,7 +27,7 @@ specific_riskiness_list = len(hedging_symbol_list) * [0.0] + map(lambda s: float
 ###################################################
 # read time series of prices
 ###################################################
-sym_data_list = map(lambda s: read_file(config["data_path"][s]), hedging_symbol_list+symbol_list)
+sym_data_list = map(lambda s: read_file(config["data_path"].get(s,config["data_path"]["default"]+s+".csv")), hedging_symbol_list+symbol_list)
 sym_data_list = map(lambda x: filter(lambda y: len(y) > 5, x), sym_data_list)
 sym_time_series_list = map(lambda data_list: map(lambda csv_fields: (datetime.strptime(csv_fields[0],"%Y-%m-%d"),float(csv_fields[5])), data_list), sym_data_list)
 insufficient_data_list = map(lambda ss: ss[0]+": "+str(len(ss[1])), filter(lambda x: len(x[1])<50, zip(hedging_symbol_list+symbol_list,sym_time_series_list)))
@@ -43,6 +47,7 @@ hist_unadj_px_dict[datetime.now().date()] = cur_px_dict
 hist_bps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_bps"])
 hist_totasset_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_totasset"])
 hist_oper_eps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_oper_eps"])
+hist_eps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_eps"])
 hist_roa_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_roa"])
 hist_stattaxrate_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_stattaxrate"])
 hist_operincm_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_operincm"])
@@ -50,19 +55,34 @@ hist_costofdebt_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_co
 hist_totliabps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_totliabps"])
 
 ###################################################
-industry_groups_list = get_industry_groups(preprocess_industry_groups(config_common["industry_group"]))
+ind_grp_list_1 = preprocess_industry_groups(config_common["industry_group"])
+industry_groups_dict = dict(ind_grp_list_1)
+industry_groups_list = get_industry_groups(ind_grp_list_1)
 
 ###################################################
-print "Start calculating expected return..."
-expected_rtn_list = calc_expected_return(config_common,datetime.now().date(),symbol_list,hist_bps_dict,hist_unadj_px_dict,hist_operincm_dict,hist_totasset_dict,hist_totliabps_dict,hist_costofdebt_dict,hist_stattaxrate_dict,hist_oper_eps_dict,hist_roa_dict)
+time_check_printout.append("Reading config: %s" % (datetime.now()-time_check))
+print "Start calculating expected return:"
+time_check = datetime.now()
+
+expected_rtn_list = calc_expected_return(config_common,datetime.now().date(),symbol_list,hist_bps_dict,hist_unadj_px_dict,hist_operincm_dict,hist_totasset_dict,hist_totliabps_dict,hist_costofdebt_dict,hist_stattaxrate_dict,hist_oper_eps_dict,hist_eps_dict,hist_roa_dict,0,True)
 expected_rtn_dict = dict(map(lambda x: tuple(x), zip(symbol_list,expected_rtn_list)))
 
+for i,sym in enumerate(symbol_list):
+    if sym in config["eps_override"]:
+        expected_rtn_list[i] = float(config["eps_override"][sym]) / cur_px_dict[sym]
+        expected_rtn_dict[sym] = float(config["eps_override"][sym]) / cur_px_dict[sym]
+
+
+time_check_printout.append("Calculating expected return: %s" % (datetime.now()-time_check))
 print "Expected return:"
+time_check = datetime.now()
 print '\n'.join(map(lambda x: justify_str(x[0],5)+": "+justify_str(round(x[1]*100,2),8)+" %", sorted(expected_rtn_dict.items(),key=lambda x: x[1],reverse=True)))
 
 ###################################################
 aug_cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(sym_time_series_list, specific_riskiness_list)
+time_check_printout.append("Calculating covariance matrix: %s" % (datetime.now()-time_check))
 print "Abnormal stdev to check:"
+time_check = datetime.now()
 print '\n'.join(map(lambda ss: ": ".join(map(str, ss)) + " %", filter(lambda x: (x[1] > 50.0) or (x[1] < 10.0), zip(hedging_symbol_list+symbol_list,map(lambda x: round(x*100.0,2), annualized_sd_list)))))
 cov_matrix = aug_cov_matrix
 for i in range(len(hedging_symbol_list)):
@@ -108,6 +128,9 @@ max_weight_list = map(lambda x: float(max_weight_dict.get(x,max_weight_dict["sin
 
 N = int(config["general"]["granularity"])
 
+###################################################
+print "Starting portfolio optimization..."
+time_check = datetime.now()
 ###################################################
 markowitz_max_sharpe_sol_list = []
 markowitz_max_kelly_f_sol_list = []
@@ -226,8 +249,8 @@ print "Current portfolio: HSI expected return: " + str(round(hsi_expected_return
 # sorting of output list
 ###################################################
 sym_sol_list = list(set(sym_sol_list))
-sym_sol_list_with_diff = map(lambda x: (x, x[1] * float(config["general"]["capital"]) - current_mkt_val_dict.get(x[0],0)), sym_sol_list)
-sym_sol_list = map(lambda x: x[0], sorted(sym_sol_list_with_diff, reverse=True, key=lambda tup: tup[1]))
+sym_sol_list_with_diff = map(lambda x: (x, int(x[1] * float(config["general"]["capital"]) - current_mkt_val_dict.get(x[0],0)), expected_rtn_dict[x[0]]), sym_sol_list)
+sym_sol_list = map(lambda x: x[0], sorted(sym_sol_list_with_diff, reverse=True, key=lambda tup: (tup[1],tup[2])))
 
 ###################################################
 # solution
@@ -259,3 +282,7 @@ print "Target portfolio:"
 
 targetportdetails_list=[header]+map(lambda x: ''.join(x), zip(columns[0],columns[1],columns[2],columns[3],columns[4],columns[5],columns[6],columns[7],columns[8],columns[9],columns[10],columns[11],columns[12],columns[13],columns[14],columns[15],columns[16],columns[17],columns[18],columns[19]))
 print '\n'.join(map(lambda x: justify_str(x[0],5)+")"+x[1], enumerate(targetportdetails_list)))
+
+###################################################
+time_check_printout.append("Portfolio optimization: %s" % (datetime.now()-time_check))
+print '\n'.join(time_check_printout)

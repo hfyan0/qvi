@@ -50,6 +50,7 @@ hist_unadj_px_dict = get_hist_data_key_date(config_common["hist_data"]["hist_una
 hist_bps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_bps"])
 hist_totasset_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_totasset"])
 hist_oper_eps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_oper_eps"])
+hist_eps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_eps"])
 hist_roa_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_roa"])
 hist_stattaxrate_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_stattaxrate"])
 hist_operincm_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_operincm"])
@@ -61,7 +62,7 @@ industry_groups_list = get_industry_groups(preprocess_industry_groups(config_com
 
 ###################################################
 start_date = datetime.strptime(config["general"]["start_date"],"%Y-%m-%d").date()
-date_list = sorted(filter(lambda x: x >= start_date, list(set(hist_unadj_px_dict.keys()).intersection(set(hist_adj_px_dict.keys())))))
+date_list = sorted(filter(lambda d: (d >= start_date) and all(map(lambda hs: hs in hist_adj_px_dict[d], hedging_symbol_list)), set(hist_unadj_px_dict.keys()).intersection(set(hist_adj_px_dict.keys()))))
 rebalance_date_list = map(lambda y: y[1], filter(lambda x: x[0]%rebalance_interval==0, [(i,d) for i,d in enumerate(date_list)]))
 
 ###################################################
@@ -84,27 +85,36 @@ for dt in rebalance_date_list:
     if len(symbol_list) < min_no_of_avb_sym:
         continue
 
-    expected_rtn_list = calc_expected_return(config_common,dt,symbol_list,hist_bps_dict,hist_unadj_px_dict,hist_operincm_dict,hist_totasset_dict,hist_totliabps_dict,hist_costofdebt_dict,hist_stattaxrate_dict,hist_oper_eps_dict,hist_roa_dict,AUDIT_DELAY)
-
+    expected_rtn_list = calc_expected_return(config_common,dt,symbol_list,hist_bps_dict,hist_unadj_px_dict,hist_operincm_dict,hist_totasset_dict,hist_totliabps_dict,hist_costofdebt_dict,hist_stattaxrate_dict,hist_oper_eps_dict,hist_eps_dict,hist_roa_dict,AUDIT_DELAY,False)
     # print str(dt) + ": " + ', '.join(map(lambda x: x[0]+":["+str(round(x[1],3))+"]:a_"+str(round(x[2],3))+";e_"+str(round(x[3],3))+";b_"+str(round(x[4],3)), zip(symbol_list,expected_rtn_list,expected_rtn_asset_driver_list,expected_rtn_external_driver_list,expected_rtn_bv_list)))
 
     ###################################################
-    max_weight_list = map(lambda x: float(max_weight_dict.get(x,max_weight_dict["single_name"])), symbol_list)
+    hsi_expected_return = filter(lambda x: x[0] <= dt, hsi_expected_return_list)[-1][1]
+    if config["general"]["hedging_type"].lower() == "toge":
+        max_weight_list = map(lambda x: 1.0, hedging_symbol_list) + map(lambda x: float(max_weight_dict.get(x,max_weight_dict["single_name"])), symbol_list)
+        symbol_list = hedging_symbol_list + symbol_list
+        expected_rtn_list = (len(hedging_symbol_list) * [hsi_expected_return/100.0]) + expected_rtn_list
+    else:
+        max_weight_list = map(lambda x: float(max_weight_dict.get(x,max_weight_dict["single_name"])), symbol_list)
     from_tgt_rtn = min(expected_rtn_list)
     to_tgt_rtn = max(expected_rtn_list)
 
     ###################################################
     specific_riskiness_list = len(hedging_symbol_list+symbol_list) * [0.0]
     hist_adj_px_list_fil_sorted = sorted(filter(lambda x: x[0] <= dt, hist_adj_px_list_sorted), key=lambda y: y[0])
-    hedging_sym_time_series_list = map(lambda s: map(lambda ts: (ts[0],ts[2]), filter(lambda h: h[1] == s, hist_adj_px_list_fil_sorted)), hedging_symbol_list)
-    sym_time_series_list         = map(lambda s: map(lambda ts: (ts[0],ts[2]), filter(lambda x: x[1] == s, hist_adj_px_list_fil_sorted)), symbol_list)
+    sym_time_series_list = map(lambda s: map(lambda ts: (ts[0],ts[2]), filter(lambda x: x[1] == s, hist_adj_px_list_fil_sorted)), symbol_list)
+    if config["general"]["hedging_type"].lower() == "toge":
+        aug_cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(sym_time_series_list, specific_riskiness_list)
+    else:
+        hedging_sym_time_series_list = map(lambda s: map(lambda ts: (ts[0],ts[2]), filter(lambda h: h[1] == s, hist_adj_px_list_fil_sorted)), hedging_symbol_list)
+        aug_cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(hedging_sym_time_series_list+sym_time_series_list, specific_riskiness_list)
 
-    aug_cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(hedging_sym_time_series_list+sym_time_series_list, specific_riskiness_list)
     cov_matrix = aug_cov_matrix
-    for i in range(len(hedging_symbol_list)):
-        cov_matrix = np.delete(cov_matrix, 0, 0)
-        cov_matrix = np.delete(cov_matrix, 0, 1)
-    # print "aug_cov %s" % (aug_cov_matrix)
+    if config["general"]["hedging_type"].lower() != "toge":
+        for i in range(len(hedging_symbol_list)):
+            cov_matrix = np.delete(cov_matrix, 0, 0)
+            cov_matrix = np.delete(cov_matrix, 0, 1)
+        # print "aug_cov %s" % (aug_cov_matrix)
     ###################################################
 
     ###################################################
@@ -168,7 +178,7 @@ for dt in rebalance_date_list:
 
     ###################################################
     sym_weight_dict = dict(zip(symbol_list,map(lambda w: str(round(w,5)), sol_list)))
-    sym_px_weight_list = map(lambda s: (s,str(hist_adj_px_dict[dt].get(s,0.0)),str(sym_weight_dict.get(s,0.0))), traded_symbol_list)
+    sym_px_weight_list = map(lambda s: (s,str(hist_adj_px_dict[dt].get(s,0.0)),str(sym_weight_dict.get(s,0.0))), symbol_list)
 
     ###################################################
     # sell all existing pos
@@ -191,7 +201,6 @@ for dt in rebalance_date_list:
     ###################################################
     # decide whether to hedge, and hedge with the most correlated index
     ###################################################
-    hsi_expected_return = filter(lambda x: x[0] <= dt, hsi_expected_return_list)[-1][1]
     most_correlated_idx_idx = sorted(enumerate(port_beta_list), key=lambda x: x[1])[-1][0]
     most_correlated_idx_sym = hedging_symbol_list[most_correlated_idx_idx]
 

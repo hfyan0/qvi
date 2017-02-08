@@ -308,8 +308,7 @@ def markowitz_robust(symbol_list,expected_rtn_list,cov_matrix,mu_p,max_weight_li
 
 ###################################################
 
-def calc_expected_return(config,dt,symbol_list,hist_bps_dict,hist_unadj_px_dict,hist_operincm_dict,hist_totasset_dict,hist_totliabps_dict,hist_costofdebt_dict,hist_stattaxrate_dict,hist_oper_eps_dict,hist_roa_dict,delay_months=0):
-
+def calc_expected_return(config,dt,symbol_list,hist_bps_dict,hist_unadj_px_dict,hist_operincm_dict,hist_totasset_dict,hist_totliabps_dict,hist_costofdebt_dict,hist_stattaxrate_dict,hist_oper_eps_dict,hist_eps_dict,hist_roa_dict,delay_months,debug_mode):
     curcy_converter = CurrencyConverter(config["currency_rate"])
     ###################################################
     # book-to-price
@@ -318,24 +317,28 @@ def calc_expected_return(config,dt,symbol_list,hist_bps_dict,hist_unadj_px_dict,
     conser_bp_ratio_list = []
     conser_bp_ratio_dict = {}
     for sym in symbol_list:
-        curcy_conv_rate = curcy_converter.get_conv_rate_to_hkd(config["reporting_currency"][sym],dt)
-        # print sym,dt,curcy_conv_rate
+        if debug_mode:
+            print "sym: %s" % sym
+
+        reporting_curcy_conv_rate = curcy_converter.get_conv_rate_to_hkd(config["reporting_currency"].get(sym,config["reporting_currency"]["default"]),dt)
+        price_curcy_conv_rate = curcy_converter.get_conv_rate_to_hkd(config["price_currency"].get(sym,config["price_currency"]["default"]),dt)
+        # print sym,dt,reporting_curcy_conv_rate
 
         bps_list = map(lambda z: z[1], filter(lambda y: y[0] > shift_back_n_months(dt,5*12+delay_months), filter(lambda x: x[0] <= shift_back_n_months(dt,delay_months), hist_bps_dict.get(sym,[]))))
         ###################################################
-        if len(bps_list) >= 3:
+        if len(bps_list) >= 3 and sym in hist_unadj_px_dict[dt]:
             bps_r = calc_return_list(bps_list)
             m = sum(bps_r)/len(bps_r)
             sd = np.std(np.asarray(bps_r))
-            conser_bp_ratio = max(curcy_conv_rate * bps_list[-1] * (1 + min(m,0.0) - float(config["general"]["bp_stdev"]) * sd) / hist_unadj_px_dict[dt][sym], 0.0)
+            conser_bp_ratio = max(reporting_curcy_conv_rate * bps_list[-1] * (1 + min(m,0.0) - float(config["general"]["bp_stdev"]) * sd) / price_curcy_conv_rate / hist_unadj_px_dict[dt][sym], 0.0)
             conser_bp_ratio_list.append(conser_bp_ratio)
             conser_bp_ratio_dict[sym] = conser_bp_ratio
         else:
             conser_bp_ratio_list.append(0.0)
             conser_bp_ratio_dict[sym] = 0.0
         ###################################################
-        if len(bps_list) > 0:
-            bp_list.append(bps_list[-1] / hist_unadj_px_dict[dt][sym])
+        if len(bps_list) > 0 and sym in hist_unadj_px_dict[dt]:
+            bp_list.append(bps_list[-1] / price_curcy_conv_rate / hist_unadj_px_dict[dt][sym])
         else:
             bp_list.append(0.0)
         ###################################################
@@ -345,21 +348,38 @@ def calc_expected_return(config,dt,symbol_list,hist_bps_dict,hist_unadj_px_dict,
     expected_rtn_external_driver_list = []
     expected_rtn_bv_list = []
     for sym in symbol_list:
-        curcy_conv_rate = curcy_converter.get_conv_rate_to_hkd(config["reporting_currency"][sym],dt)
+        if debug_mode:
+            print "--------------------------------------------------"
+            print "sym: %s" % sym
+            print "--------------------------------------------------"
+
+        if sym not in hist_unadj_px_dict[dt]:
+            expected_rtn_asset_driver_list.append(0)
+            expected_rtn_external_driver_list.append(0)
+            expected_rtn_bv_list.append(0)
+            print "--------------------------------------------------"
+            print "No unadj price: %s" % sym
+            print "--------------------------------------------------"
+            continue
+
+        reporting_curcy_conv_rate = curcy_converter.get_conv_rate_to_hkd(config["reporting_currency"].get(sym,config["reporting_currency"]["default"]),dt)
+        price_curcy_conv_rate = curcy_converter.get_conv_rate_to_hkd(config["price_currency"].get(sym,config["price_currency"]["default"]),dt)
         ###################################################
-        indus_grp = config["industry_group"][sym]
+        indus_grp = config["industry_group"].get(sym,config["industry_group"]["default"])
         w_ig_list = []
         try:
             w_ig_list.append((1.0,str(int(indus_grp))))
         except Exception, e:
             w_ig_list.extend(map(lambda x: (float(x.split(':')[1]),str(x.split(':')[0])), indus_grp))
 
-        w_a_w_e_list = []
+        w_a_w_e_bv_list = []
         for w,ig in w_ig_list:
-            w_a_w_e_list.append(tuple(map(lambda x: w*x, map(float, config["expected_rtn_ast_ext"].get(ig, config["expected_rtn_ast_ext"]["0"])))))
+            w_a_w_e_bv_list.append(tuple(map(lambda x: w*x, map(float, config["expected_rtn_ast_ext_bvrlzn_bvrcvy"].get(ig, config["expected_rtn_ast_ext_bvrlzn_bvrcvy"]["0"])))))
 
-        w_a = sum(map(lambda x: x[0], w_a_w_e_list))
-        w_e = sum(map(lambda x: x[1], w_a_w_e_list))
+        w_a    = sum(map(lambda x: x[0], w_a_w_e_bv_list))
+        w_e    = sum(map(lambda x: x[1], w_a_w_e_bv_list))
+        bvrlzn = sum(map(lambda x: x[2], w_a_w_e_bv_list))
+        bvrcvy = sum(map(lambda x: x[3], w_a_w_e_bv_list))
         # print "sym: %s %s %s" % (sym, w_a, w_e)
 
         ###################################################
@@ -394,12 +414,12 @@ def calc_expected_return(config,dt,symbol_list,hist_bps_dict,hist_unadj_px_dict,
             m = sum(oper_roa_list)/len(oper_roa_list)
             sd = np.std(np.asarray(oper_roa_list))
             conser_oper_roa = annualization_factor * (min(m,oper_roa_list[-1]) - float(config["general"]["roa_drvr_stdev"]) * sd)
-            # print "sym: %s" % sym
-            # print "oper_roa_list: %s" % oper_roa_list
-            # print "annualization_factor: %s" % annualization_factor
-            # print "m: %s" % m
-            # print "sd: %s" % sd
-            # print "conser_oper_roa (after annualization): %s" % conser_oper_roa
+            if debug_mode:
+                print "oper_roa_list: %s" % oper_roa_list
+                print "annualization_factor: %s" % annualization_factor
+                print "m: %s" % m
+                print "sd: %s" % sd
+                print "conser_oper_roa (annualized): %s" % conser_oper_roa
         else:
             conser_oper_roa = 0.0
 
@@ -416,12 +436,11 @@ def calc_expected_return(config,dt,symbol_list,hist_bps_dict,hist_unadj_px_dict,
             # Bloomberg's ROA is already annualized
             ###################################################
             conser_roa = (min(m,roa_list[-1]) - float(config["general"]["roa_drvr_stdev"]) * sd) / 100.0
-            # print "sym: %s" % sym
-            # print "roa_list: %s" % roa_list
-            # print "annualization_factor: %s" % annualization_factor
-            # print "m: %s" % m
-            # print "sd: %s" % sd
-            # print "conser_roa (after annualization): %s" % conser_roa
+            if debug_mode:
+                print "roa_list (annualized %%): %s" % roa_list
+                print "m: %s" % m
+                print "sd: %s" % sd
+                print "conser_roa (annualized): %s" % conser_roa
         else:
             conser_roa = 0.0
 
@@ -451,15 +470,26 @@ def calc_expected_return(config,dt,symbol_list,hist_bps_dict,hist_unadj_px_dict,
         else:
             taxrate = 0.0
 
-        # print "totliabps: %s" % totliabps
-        # print "bps: %s" % bps
-        meth_1 = w_a*(1-taxrate)*(conser_oper_roa*(totliabps+bps)-iL)*curcy_conv_rate/hist_unadj_px_dict[dt][sym]
-        meth_2 = w_a*(conser_roa*(totliabps+bps))*curcy_conv_rate/hist_unadj_px_dict[dt][sym]
+        meth_1 = (1-taxrate)*(conser_oper_roa*(totliabps+bps)-iL)*reporting_curcy_conv_rate/price_curcy_conv_rate/hist_unadj_px_dict[dt][sym]
+        meth_2 = (conser_roa*(totliabps+bps))*reporting_curcy_conv_rate/price_curcy_conv_rate/hist_unadj_px_dict[dt][sym]
+
+        if debug_mode:
+            print "tax rate: %s" % taxrate
+            # print "stattaxrate_list: %s" % stattaxrate_list
+            print "totliabps: %s" % totliabps
+            print "bps: %s" % bps
+            print "--------------------------------------------------"
+            print "asset driver: meth_1: %s" % meth_1
+            print "asset driver: meth_2: %s" % meth_2
+            print "--------------------------------------------------"
+
+        meth_1 = w_a*meth_1
+        meth_2 = w_a*meth_2
 
         expected_rtn_asset_driver_list.append(min(meth_1,meth_2))
 
         ###################################################
-        # external driver
+        # external driver: oper_eps
         ###################################################
         oper_eps_list = filter(lambda y: y[0] > shift_back_n_months(dt,12*4+delay_months), filter(lambda x: x[0] <= shift_back_n_months(dt,delay_months), hist_oper_eps_dict.get(sym,[])))
         oper_eps_chg_list = map(lambda x: x[0][1]-x[1][1], zip(oper_eps_list[1:],oper_eps_list[:-1]))
@@ -469,21 +499,69 @@ def calc_expected_return(config,dt,symbol_list,hist_bps_dict,hist_unadj_px_dict,
             m = sum(oper_eps_chg_list)/len(oper_eps_chg_list)
             sd = np.std(np.asarray(oper_eps_chg_list))
             conser_oper_eps = (oper_eps_list[-1] + min(m,0.0) - float(config["general"]["ext_drvr_stdev"]) * sd) * annualization_factor
-            # print "sym: %s" % sym
-            # print "oper_eps_list: %s" % oper_eps_list
-            # print "oper_eps_chg_list: %s" % oper_eps_chg_list
-            # print "annualization_factor: %s" % annualization_factor
-            # print "m: %s" % m
-            # print "sd: %s" % sd
+            if debug_mode:
+                print "oper_eps_list: %s" % oper_eps_list
+                print "oper_eps_chg_list: %s" % oper_eps_chg_list
+                print "annualization_factor: %s" % annualization_factor
+                print "m: %s" % m
+                print "sd: %s" % sd
+                print "conser_oper_eps (annualized): %s" % conser_oper_eps
         else:
             conser_oper_eps = 0.0
 
-        expected_rtn_external_driver_list.append(w_e*(1-taxrate)*(conser_oper_eps-iL)*curcy_conv_rate/hist_unadj_px_dict[dt][sym])
+        ###################################################
+        # external driver: eps
+        ###################################################
+        eps_list = filter(lambda y: y[0] > shift_back_n_months(dt,12*4+delay_months), filter(lambda x: x[0] <= shift_back_n_months(dt,delay_months), hist_eps_dict.get(sym,[])))
+        eps_chg_list = map(lambda x: x[0][1]-x[1][1], zip(eps_list[1:],eps_list[:-1]))
+        if len(eps_chg_list) >= 5:
+            eps_list = map(lambda z: z[1][1], sorted(sorted(enumerate(eps_list), key=lambda x: x[1][1])[1:][:-1], key=lambda y: y[0]))
+            eps_chg_list = sorted(eps_chg_list)[1:][:-1]
+            m = sum(eps_chg_list)/len(eps_chg_list)
+            sd = np.std(np.asarray(eps_chg_list))
+            conser_eps = (eps_list[-1] + min(m,0.0) - float(config["general"]["ext_drvr_stdev"]) * sd) * annualization_factor
+            if debug_mode:
+                print "eps_list: %s" % eps_list
+                print "eps_chg_list: %s" % eps_chg_list
+                print "annualization_factor: %s" % annualization_factor
+                print "m: %s" % m
+                print "sd: %s" % sd
+                print "conser_eps: %s" % conser_eps
+        else:
+            conser_eps = 0.0
+
+        meth_1 = (1-taxrate)*(conser_oper_eps-iL)*reporting_curcy_conv_rate/price_curcy_conv_rate/hist_unadj_px_dict[dt][sym]
+        meth_2 = conser_eps*reporting_curcy_conv_rate/price_curcy_conv_rate/hist_unadj_px_dict[dt][sym]
+
+        if debug_mode:
+            print "tax rate: %s" % taxrate
+            # print "stattaxrate_list: %s" % stattaxrate_list
+            print "reporting_curcy_conv_rate: %s" % reporting_curcy_conv_rate
+            print "price_curcy_conv_rate: %s" % price_curcy_conv_rate
+            print "--------------------------------------------------"
+            print "external driver: meth_1: %s" % meth_1
+            print "external driver: meth_2: %s" % meth_2
+            print "--------------------------------------------------"
+
+        meth_1 = w_e*meth_1
+        meth_2 = w_e*meth_2
+
+        expected_rtn_external_driver_list.append(min(meth_1,meth_2))
 
         ###################################################
         # liquidation to realize book value
         ###################################################
-        expected_rtn_bv_list.append(math.pow(conser_bp_ratio_dict[sym],1.0/float(config["general"]["default_liquidation_years"]))-1)
+        meth_1 = math.pow(bvrcvy*conser_bp_ratio_dict[sym],1.0/bvrlzn)-1
+        expected_rtn_bv_list.append(meth_1)
+
+        if debug_mode:
+            print "conser_bp_ratio: %s" % conser_bp_ratio_dict[sym]
+            print "bvrlzn: %s" % bvrlzn
+            print "bvrcvy: %s" % bvrcvy
+            print "--------------------------------------------------"
+            print "book value realization: %s" % meth_1
+            print "--------------------------------------------------"
+
 
     expected_rtn_list = map(lambda x: max(x[0]+x[1],x[2]), zip(expected_rtn_asset_driver_list,expected_rtn_external_driver_list,expected_rtn_bv_list))
 
