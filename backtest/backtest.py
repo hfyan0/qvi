@@ -30,8 +30,15 @@ rebalance_interval = int(config["general"]["rebalance_interval"])
 N = int(config["general"]["granularity"])
 max_weight_dict = config["max_weight"]
 
-her = config["general"]["hsi_expected_return"]
-hsi_expected_return_list = sorted(map(lambda y: (datetime.strptime(y[1],"%Y-%m-%d").date(),float(y[2])), filter(lambda x: x[0]%2==0, zip(range(len(her)-1),her[:-1],her[1:]))), key=lambda x: x[0])
+er_hdg_dict = {}
+er_hdg_key_list = filter(lambda x: "expected_return_" in x, config_common["general"].keys())
+
+for k,v in dict(map(lambda x: (config_common["general"][x][0], config_common["general"][x][1:]), er_hdg_key_list)).items():
+    er_hdg_dict[k] = sorted(map(lambda y: (datetime.strptime(y[1],"%Y-%m-%d").date(),float(y[2])), filter(lambda x: x[0]%2==0, zip(range(len(v)-1),v[:-1],v[1:]))), key=lambda x: x[0])
+
+print '\n'.join(map(str, er_hdg_dict.items()))
+
+
 hsi_hhi_constituents_list = map(lambda x: (x[0],datetime.strptime(x[1],"%Y-%m-%d").date(),datetime.strptime(x[2],"%Y-%m-%d").date()), read_file(config_common["general"]["hsi_hhi_constituents"]))
 dow_constituents_list = sorted(map(lambda x: (datetime.strptime(x[0],"%Y-%m-%d").date(),x[1:]), read_file(config_common["general"]["dow_constituents"])), key=lambda y: y[0])
 
@@ -208,8 +215,22 @@ for dt in rebalance_date_list:
     if config["general"]["hedging_type"].lower() == "beta":
         h = port_beta_list[most_correlated_idx_idx]
         pos_dict[most_correlated_idx_sym] = -h * capital_to_use / hist_adj_px_dict[dt][most_correlated_idx_sym]
-    elif config["general"]["hedging_type"].lower() == "smart":
+    elif config["general"]["hedging_type"].lower() == "riskadj":
         h = min(max(port_beta_list[most_correlated_idx_idx] - hsi_expected_return / 100.0 / 0.7, 0.0), 1.0)
+        pos_dict[most_correlated_idx_sym] = -h * capital_to_use / hist_adj_px_dict[dt][most_correlated_idx_sym]
+    elif config["general"]["hedging_type"].lower() == "logopt":
+        sol_vec = np.asarray(sol_list)
+        sol_vec_T = np.matrix(sol_vec).T
+        port_var = float((sol_vec * cov_matrix) * sol_vec_T)
+        hedge_var = aug_cov_matrix.tolist()[most_correlated_idx_idx][most_correlated_idx_idx]
+
+        hv_list = []
+        for i in range(100):
+            h_tmp = -float(i)/100.0
+            hv_list.append((h_tmp, h_tmp * hsi_expected_return - ((port_var + h_tmp*h_tmp*hedge_var + 2*h_tmp*port_beta_list[most_correlated_idx_idx]*hedge_var) / 2 / math.pow(1+h_tmp,2))))
+
+        # print "hv_list: %s" % hv_list
+        h = -sorted(hv_list, key=lambda x: x[1])[-1][0]
         pos_dict[most_correlated_idx_sym] = -h * capital_to_use / hist_adj_px_dict[dt][most_correlated_idx_sym]
     elif config["general"]["hedging_type"].lower() == "half":
         h = 0.5

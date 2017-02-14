@@ -569,13 +569,13 @@ def calc_expected_return(config,dt,symbol_list,hist_bps_dict,hist_unadj_px_dict,
 
 def preprocess_industry_groups(industry_group_dict):
     industry_group_list = []
-    for k,v in industry_group_dict.items():
+    for k,v in sorted(industry_group_dict.items(),key=lambda x: x[0]):
         try:
             i = int(v)
             industry_group_list.append((k,i))
         except Exception, e:
             industry_group_list.extend(map(lambda x: (k,int(x.split(":")[0])), v))
-    return map(lambda x: (x[0],str(x[1])), filter(lambda x: x[1] > 0, industry_group_list)) + map(lambda x: (x[1],str(x[0]+1000)), enumerate(map(lambda x: x[0], filter(lambda x: x[1] == 0, industry_group_list))))
+    return map(lambda x: (x[0],str(x[1])), filter(lambda x: x[1] > 0, industry_group_list)) + map(lambda x: (x[1],str(x[0]+300)), enumerate(map(lambda x: x[0], filter(lambda x: x[1] == 0, industry_group_list))))
 
 def get_industry_groups(industry_group_list):
     industry_groups_set_list = []

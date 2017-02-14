@@ -58,6 +58,7 @@ hist_totliabps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_tot
 ind_grp_list_1 = preprocess_industry_groups(config_common["industry_group"])
 industry_groups_dict = dict(ind_grp_list_1)
 industry_groups_list = get_industry_groups(ind_grp_list_1)
+# print '\n'.join(map(lambda x: ':'.join(map(str, x)), industry_groups_dict.items()))
 
 ###################################################
 time_check_printout.append("Reading config: %s" % (datetime.now()-time_check))
@@ -67,11 +68,29 @@ time_check = datetime.now()
 expected_rtn_list = calc_expected_return(config_common,datetime.now().date(),symbol_list,hist_bps_dict,hist_unadj_px_dict,hist_operincm_dict,hist_totasset_dict,hist_totliabps_dict,hist_costofdebt_dict,hist_stattaxrate_dict,hist_oper_eps_dict,hist_eps_dict,hist_roa_dict,0,True)
 expected_rtn_dict = dict(map(lambda x: tuple(x), zip(symbol_list,expected_rtn_list)))
 
+###################################################
+# EPS override
+###################################################
+sym_with_missed_next_earnings = filter(lambda x: x in symbol_list, config["eps_override"]["miss_next_earnings"])
 for i,sym in enumerate(symbol_list):
     if sym in config["eps_override"]:
-        expected_rtn_list[i] = float(config["eps_override"][sym]) / cur_px_dict[sym]
-        expected_rtn_dict[sym] = float(config["eps_override"][sym]) / cur_px_dict[sym]
-
+        r = float(config["eps_override"][sym]) / cur_px_dict[sym]
+        expected_rtn_list[i] = r
+        expected_rtn_dict[sym] = r
+    if sym in sym_with_missed_next_earnings:
+        b = hist_bps_dict[sym][-1][1]
+        p = cur_px_dict[sym]
+        e = float(config["eps_override"][sym])
+        r1 = None
+        r2 = None
+        try:
+            r1 = (2*b - p + math.sqrt(math.pow(2*b-p,2)-4*p*e))/2/p
+            r2 = (2*b - p - math.sqrt(math.pow(2*b-p,2)-4*p*e))/2/p
+        except:
+            pass
+        r = min(filter(lambda x: x is not None, [r1,r2]))
+        expected_rtn_list[i] = r
+        expected_rtn_dict[sym] = r
 
 time_check_printout.append("Calculating expected return: %s" % (datetime.now()-time_check))
 print "Expected return:"
