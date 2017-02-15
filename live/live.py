@@ -8,7 +8,7 @@ import numpy as np
 import os
 sys.path.append(os.path.dirname(sys.path[0]))
 from mvo import CurrencyConverter,calc_cov_matrix_annualized,intWithCommas,justify_str,\
-                markowitz,markowitz_robust,log_optimal_growth,read_file,calc_expected_return,\
+                markowitz_sharpe,markowitz_robust,log_optimal_growth,read_file,calc_expected_return,\
                 get_hist_data_key_sym,get_industry_groups,preprocess_industry_groups
 
 ###################################################
@@ -152,31 +152,12 @@ print "Starting portfolio optimization..."
 time_check = datetime.now()
 ###################################################
 markowitz_max_sharpe_sol_list = []
-markowitz_max_kelly_f_sol_list = []
-if float(config["general"]["markowitz_max_kelly_f_weight"] > 0.0) or float(config["general"]["markowitz_max_sharpe_weight"] > 0.0):
-    for i in range(N):
-        mu_p = from_tgt_rtn + (to_tgt_rtn - from_tgt_rtn) * float(i)/float(N)
-        tmp_sol_list = markowitz(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list, float(config["general"]["min_expected_return"]), industry_groups_list, float(config["max_weight"]["industry"]), float(config["general"]["portfolio_change_inertia"]), float(config["general"]["hatred_for_small_size"]), current_weight_list)
-        # tmp_sol_list = markowitz_robust(symbol_list, expected_rtn_list, cov_matrix, mu_p, max_weight_list, expected_rtn_uncertainty_list, float(config["general"]["portfolio_change_inertia"]), float(config["general"]["hatred_for_small_size"]), current_weight_list)
-
-        if tmp_sol_list is None:
-            continue
-        tmp_sol_list = list(tmp_sol_list["result"]['x'])
-
-        sol_vec = np.asarray(tmp_sol_list)
-        sol_vec_T = np.matrix(sol_vec).T
-
-        frontier_port_exp_rtn = float(np.asarray(expected_rtn_list) * sol_vec_T)
-        frontier_port_stdev = math.sqrt(float((sol_vec * cov_matrix) * sol_vec_T))
-        frontier_port_sharpe_ratio = float(frontier_port_exp_rtn / frontier_port_stdev)
-        frontier_port_kelly_f = float(frontier_port_exp_rtn / frontier_port_stdev / frontier_port_stdev)
-        frontier_port_exp_dollar_rtn_list = map(lambda x: x[0]*x[1]*float(config["general"]["capital"]), zip(tmp_sol_list,expected_rtn_list))
-
-        if (len(markowitz_max_sharpe_sol_list) == 0) or (frontier_port_sharpe_ratio > markowitz_max_sharpe_sol_list[0]):
-            markowitz_max_sharpe_sol_list = [frontier_port_sharpe_ratio,tmp_sol_list]
-
-        if len(markowitz_max_kelly_f_sol_list) == 0 or (frontier_port_kelly_f > markowitz_max_kelly_f_sol_list[0]):
-            markowitz_max_kelly_f_sol_list = [frontier_port_kelly_f,tmp_sol_list]
+if float(config["general"]["markowitz_max_sharpe_weight"] > 0.0):
+    tmp_sol_list = markowitz_sharpe(symbol_list, expected_rtn_list, cov_matrix, max_weight_list, float(config["general"]["min_expected_return"]), industry_groups_list, float(config["max_weight"]["industry"]), float(config["general"]["portfolio_change_inertia"]), float(config["general"]["hatred_for_small_size"]), current_weight_list)
+    if tmp_sol_list is None:
+        print "Failed to find solution."
+        sys.exit(0)
+    markowitz_max_sharpe_sol_list = list(tmp_sol_list["result"]['x'])
 ###################################################
 
 ###################################################
@@ -186,22 +167,15 @@ if float(config["general"]["log_optimal_growth_weight"]) > 0.0:
     if tmp_sol_list is None:
         print "Failed to find solution."
         sys.exit(0)
-    tmp_sol_list = list(tmp_sol_list["result"]['x'])
-
-    sol_vec = np.asarray(tmp_sol_list)
-    sol_vec_T = np.matrix(sol_vec).T
-
-    log_optimal_sol_list = tmp_sol_list
+    log_optimal_sol_list = list(tmp_sol_list["result"]['x'])
 ###################################################
 
 ###################################################
 sol_list = len(symbol_list) * [0.0]
 if float(config["general"]["log_optimal_growth_weight"]) > 0.0:
     sol_list = map(sum, zip(sol_list,map(lambda x: x * float(config["general"]["log_optimal_growth_weight"]), log_optimal_sol_list)))
-if float(config["general"]["markowitz_max_kelly_f_weight"]) > 0.0:
-    sol_list = map(sum, zip(sol_list,map(lambda x: x * float(config["general"]["markowitz_max_kelly_f_weight"]), markowitz_max_kelly_f_sol_list[1])))
 if float(config["general"]["markowitz_max_sharpe_weight"]) > 0.0:
-    sol_list = map(sum, zip(sol_list,map(lambda x: x * float(config["general"]["markowitz_max_sharpe_weight"]), markowitz_max_sharpe_sol_list[1])))
+    sol_list = map(sum, zip(sol_list,map(lambda x: x * float(config["general"]["markowitz_max_sharpe_weight"]), markowitz_max_sharpe_sol_list)))
 ###################################################
 
 sol_vec = np.asarray(sol_list)

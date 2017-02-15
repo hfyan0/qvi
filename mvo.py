@@ -212,7 +212,7 @@ def markowitz(symbol_list,expected_rtn_list,cov_matrix,mu_p,max_weight_list,min_
 
     return {'w': w, 'f': f, 'args': (P, q, G, h, A, b), 'result': sol }
 
-def markowitz_riskadj(symbol_list,expected_rtn_list,cov_matrix,max_weight_list,min_exp_rtn,industry_groups_list,max_weight_industry,sharpe_risk_aversion_factor,portfolio_change_inertia=None,hatred_for_small_size=None,current_weight_list=None):
+def markowitz_sharpe(symbol_list,expected_rtn_list,cov_matrix,max_weight_list,min_exp_rtn,industry_groups_list,max_weight_industry,portfolio_change_inertia=None,hatred_for_small_size=None,current_weight_list=None):
     def iif(cond, iftrue=1.0, iffalse=0.0):
         if cond:
             return iftrue
@@ -224,40 +224,41 @@ def markowitz_riskadj(symbol_list,expected_rtn_list,cov_matrix,max_weight_list,m
     ###################################################
     # P and q determine the objective function to minimize
     # which in cvxopt is defined as $.5 x^T P x + q^T x$
-    if portfolio_change_inertia is None or current_weight_list is None or hatred_for_small_size is None:
-        P = cvxopt.matrix(sharpe_risk_aversion_factor * cov_matrix)
-        q = cvxopt.matrix(map(lambda x: -x, expected_rtn_list))
-    else:
-        P = cvxopt.matrix(2.0 * (sharpe_risk_aversion_factor * cov_matrix + (portfolio_change_inertia - hatred_for_small_size) * np.identity(n)))
-        l1 = map(lambda cw: (-2 * portfolio_change_inertia * cw) + (2 * hatred_for_small_size), current_weight_list)
-        l2 = map(lambda x: -x, expected_rtn_list)
-        q = cvxopt.matrix( map(lambda x: x[0]+x[1], zip(l1,l2)) )
 
     ###################################################
-    # G and h determine the inequality constraints in the
-    # form $G x \leq h$. We write $w_i \geq 0$ as $-1 \times x_i \leq 0$
-    # and also add a (superfluous) $x_i \leq 1$ constraint
+    # FIXME
+    ###################################################
+    P = cvxopt.matrix(2.0 * cov_matrix)
+    q = cvxopt.matrix([0.0 for i in range(n)])
+    # if portfolio_change_inertia is None or current_weight_list is None or hatred_for_small_size is None:
+    #     P = cvxopt.matrix(2.0 * cov_matrix)
+    #     q = cvxopt.matrix([0.0 for i in range(n)])
+    # else:
+    #     P = cvxopt.matrix(2.0 * (cov_matrix + (portfolio_change_inertia - hatred_for_small_size) * np.identity(n)))
+    #     l1 = map(lambda cw: (-2 * portfolio_change_inertia * cw) + (2 * hatred_for_small_size), current_weight_list)
+    #     l2 = map(lambda x: -x, expected_rtn_list)
+    #     q = cvxopt.matrix( map(lambda x: x[0]+x[1], zip(l1,l2)) )
+
     ###################################################
     # G x <= h
-    # -1  0  0  0 ... 0          0
-    #  1  0  0  0 ... 0          w_0
-    #  0 -1  0  0 ... 0          0
-    #  0  1  0  0 ... 0          w_1
-    #  0  0 -1  0 ... 0
-    #  0  0  1  0 ... 0
     ###################################################
-    G = cvxopt.matrix(
-                [ [ (-1.0 if (i==j) else 0.0) for i in range(n) ] for j in range(n) ] +
-                [ [ ( 1.0 if (i==j) else 0.0) for i in range(n) ] for j in range(n) ] +
-                map(lambda ig_set: map(lambda s: 1.0 if (s in ig_set) else 0.0, symbol_list), industry_groups_list)
-                ).trans()
-    h = cvxopt.matrix( [ 0.0 for i in range(n) ] + [ 0.0 if expected_rtn_list[i] < min_exp_rtn else max_weight_list[i] for i in range(n) ] + map(lambda x: max_weight_industry, industry_groups_list) )
-    ###################################################
+    min_exp_rtn_and_max_weight_constraint_list = [ 0.0 if expected_rtn_list[i] < min_exp_rtn else max_weight_list[i] for i in range(n) ]
+    max_industry_weight_constraint_list = map(lambda x: max_weight_industry, industry_groups_list)
 
+    Gm = [ [ ((-1.0 if (i==j) else 0.0) - 0.0)                                           for i in range(n) ] for j in range(n) ] +\
+         [ [ (( 1.0 if (i==j) else 0.0) - min_exp_rtn_and_max_weight_constraint_list[j]) for i in range(n) ] for j in range(n) ] +\
+         map(lambda ig_set: map(lambda s: (1.0 if (s in ig_set) else 0.0) - max_weight_industry, symbol_list), industry_groups_list)
+
+    G = cvxopt.matrix(Gm).trans()
+    h = cvxopt.matrix([ 0.0 ] * len(Gm))
+
+    ###################################################
     # A and b determine the equality constraints defined as A x = b
-    A = cvxopt.matrix([[ 1.0 for i in range(n) ]]).trans()
+    ###################################################
+    A = cvxopt.matrix( [expected_rtn_list] ).trans()
     b = cvxopt.matrix([ 1.0 ])
 
+    ###################################################
     solvers.options['show_progress'] = False
     try:
         sol = solvers.qp(P, q, G, h, A, b)
@@ -267,6 +268,12 @@ def markowitz_riskadj(symbol_list,expected_rtn_list,cov_matrix,max_weight_list,m
     if sol['status'] != 'optimal':
         return None
 
+    ###################################################
+    # transform back to the original space
+    ###################################################
+    y_list = list(sol['x'])
+    sy = sum(y_list)
+    sol['x'] = map(lambda y: y / sy, y_list)
     return {'result': sol }
 
 def log_optimal_growth(symbol_list,expected_rtn_list,cov_matrix,max_weight_list,industry_groups_list,max_weight_industry,portfolio_change_inertia=None,hatred_for_small_size=None,current_weight_list=None):
@@ -756,5 +763,3 @@ def log_optimal_hedge(expected_rtn_list,cov_matrix):
         return None
 
     return list(sol['x'])
-
-

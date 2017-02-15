@@ -9,7 +9,7 @@ from itertools import groupby
 
 import os
 sys.path.append(os.path.dirname(sys.path[0]))
-from mvo import calc_cov_matrix_annualized,intWithCommas,justify_str,markowitz,markowitz_robust,markowitz_riskadj,log_optimal_growth,\
+from mvo import calc_cov_matrix_annualized,intWithCommas,justify_str,markowitz,markowitz_robust,markowitz_sharpe,log_optimal_growth,\
                 read_file,extract_sd_from_cov_matrix,calc_return_list,get_hist_data_key_date,get_hist_data_key_sym,calc_expected_return,\
                 get_industry_groups,preprocess_industry_groups,get_port_and_hdg_cov_matrix,log_optimal_hedge,risk_adj_rtn_hedge
 
@@ -126,8 +126,9 @@ for dt in rebalance_date_list:
 
     ###################################################
     if config["general"]["construction_method"] == "markowitz_max_sharpe":
-        markowitz_max_sharpe_sol_list = markowitz_riskadj(symbol_list, expected_rtn_list, cov_matrix, max_weight_list, 0.0, industry_groups_list, float(config["max_weight"]["industry"]), float(config_common["general"]["sharpe_risk_aversion_factor"]))
+        markowitz_max_sharpe_sol_list = markowitz_sharpe(symbol_list, expected_rtn_list, cov_matrix, max_weight_list, 0.0, industry_groups_list, float(config["max_weight"]["industry"]))
         if markowitz_max_sharpe_sol_list is None:
+            print "shit"
             continue
         markowitz_max_sharpe_sol_list = list(markowitz_max_sharpe_sol_list["result"]['x'])
     ###################################################
