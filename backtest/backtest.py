@@ -11,7 +11,7 @@ import os
 sys.path.append(os.path.dirname(sys.path[0]))
 from mvo import calc_cov_matrix_annualized,intWithCommas,justify_str,markowitz,markowitz_robust,markowitz_sharpe,log_optimal_growth,\
                 read_file,extract_sd_from_cov_matrix,calc_return_list,get_hist_data_key_date,get_hist_data_key_sym,calc_expected_return,\
-                get_industry_groups,preprocess_industry_groups,get_port_and_hdg_cov_matrix,log_optimal_hedge,risk_adj_rtn_hedge
+                get_industry_groups,preprocess_industry_groups,get_port_and_hdg_cov_matrix,log_optimal_hedge,sharpe_hedge
 
 ###################################################
 AUDIT_DELAY = 3.0
@@ -128,7 +128,6 @@ for dt in rebalance_date_list:
     if config["general"]["construction_method"] == "markowitz_max_sharpe":
         markowitz_max_sharpe_sol_list = markowitz_sharpe(symbol_list, expected_rtn_list, cov_matrix, max_weight_list, 0.0, industry_groups_list, float(config["max_weight"]["industry"]))
         if markowitz_max_sharpe_sol_list is None:
-            print "shit"
             continue
         markowitz_max_sharpe_sol_list = list(markowitz_max_sharpe_sol_list["result"]['x'])
     ###################################################
@@ -217,14 +216,15 @@ for dt in rebalance_date_list:
     if config["general"]["hedging_type"].lower() == "beta":
         h_list.append(port_beta_list[most_correlated_idx_idx])
         pos_dict[most_correlated_idx_sym] = -h_list[0] * capital_to_use / hist_adj_px_dict[dt][most_correlated_idx_sym]
-    elif (config["general"]["hedging_type"].lower() == "riskadj") or (config["general"]["hedging_type"].lower() == "logopt"):
+    elif (config["general"]["hedging_type"].lower() == "sharpe") or (config["general"]["hedging_type"].lower() == "logopt"):
         new_rtn_vec = ([sum(map(lambda x: x[0]*x[1], zip(expected_rtn_list,sol_list)))] + map(lambda hs: hedge_expected_rtn_dict[hs], hedging_symbol_list))
         new_cov_matrix = get_port_and_hdg_cov_matrix(aug_cov_matrix,sol_list,hedging_symbol_list)
         # print new_rtn_vec
         # print new_cov_matrix
         # print hedging_symbol_list
-        if config["general"]["hedging_type"].lower() == "riskadj":
-            h_sol_vec = risk_adj_rtn_hedge(new_rtn_vec,new_cov_matrix,float(config_common["general"]["sharpe_risk_aversion_factor"]))
+        if config["general"]["hedging_type"].lower() == "sharpe":
+            # h_sol_vec = risk_adj_rtn_hedge(new_rtn_vec,new_cov_matrix,float(config_common["general"]["sharpe_risk_aversion_factor"]))
+            h_sol_vec = sharpe_hedge(new_rtn_vec,new_cov_matrix)
         elif config["general"]["hedging_type"].lower() == "logopt":
             h_sol_vec = log_optimal_hedge(new_rtn_vec,new_cov_matrix)
 

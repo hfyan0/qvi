@@ -763,3 +763,55 @@ def log_optimal_hedge(expected_rtn_list,cov_matrix):
         return None
 
     return list(sol['x'])
+
+def sharpe_hedge(expected_rtn_list,cov_matrix):
+    def iif(cond, iftrue=1.0, iffalse=0.0):
+        if cond:
+            return iftrue
+        else:
+            return iffalse
+
+    n = len(expected_rtn_list)-1
+
+    ###################################################
+    # P and q determine the objective function to minimize
+    # which in cvxopt is defined as $.5 x^T P x + q^T x$
+
+    ###################################################
+    P = cvxopt.matrix(cov_matrix)
+    q = cvxopt.matrix([0.0 for i in range(n+1)])
+
+    ###################################################
+    # G x <= h
+    ###################################################
+    b1_list = [ 1.0] + n * [0.0]
+    b2_list = [-1.0] + n * [1.0]
+    G = cvxopt.matrix(
+                [[(( 1.0 if j==i else 0.0) - b1_list[i]) for j in range(n+1)] for i in range(n+1)] +
+                [[((-1.0 if j==i else 0.0) - b2_list[i]) for j in range(n+1)] for i in range(n+1)]
+                ).trans()
+    h = cvxopt.matrix([0.0]*(2*(n+1)))
+
+    ###################################################
+    # A and b determine the equality constraints defined as A x = b
+    ###################################################
+    A = cvxopt.matrix( [expected_rtn_list] ).trans()
+    b = cvxopt.matrix([ 1.0 ])
+
+    ###################################################
+    solvers.options['show_progress'] = False
+    try:
+        sol = solvers.qp(P, q, G, h, A, b)
+    except:
+        return None
+
+    if sol['status'] != 'optimal':
+        return None
+
+    ###################################################
+    # transform back to the original space
+    ###################################################
+    y_list = list(sol['x'])
+    sy = sum(y_list)
+    return map(lambda y: y / sy, y_list)
+
