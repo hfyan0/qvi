@@ -212,6 +212,63 @@ def markowitz(symbol_list,expected_rtn_list,cov_matrix,mu_p,max_weight_list,min_
 
     return {'w': w, 'f': f, 'args': (P, q, G, h, A, b), 'result': sol }
 
+def markowitz_riskadj(symbol_list,expected_rtn_list,cov_matrix,max_weight_list,min_exp_rtn,industry_groups_list,max_weight_industry,sharpe_risk_aversion_factor,portfolio_change_inertia=None,hatred_for_small_size=None,current_weight_list=None):
+    def iif(cond, iftrue=1.0, iffalse=0.0):
+        if cond:
+            return iftrue
+        else:
+            return iffalse
+
+    n = len(symbol_list)
+
+    ###################################################
+    # P and q determine the objective function to minimize
+    # which in cvxopt is defined as $.5 x^T P x + q^T x$
+    if portfolio_change_inertia is None or current_weight_list is None or hatred_for_small_size is None:
+        P = cvxopt.matrix(sharpe_risk_aversion_factor * cov_matrix)
+        q = cvxopt.matrix(map(lambda x: -x, expected_rtn_list))
+    else:
+        P = cvxopt.matrix(2.0 * (sharpe_risk_aversion_factor * cov_matrix + (portfolio_change_inertia - hatred_for_small_size) * np.identity(n)))
+        l1 = map(lambda cw: (-2 * portfolio_change_inertia * cw) + (2 * hatred_for_small_size), current_weight_list)
+        l2 = map(lambda x: -x, expected_rtn_list)
+        q = cvxopt.matrix( map(lambda x: x[0]+x[1], zip(l1,l2)) )
+
+    ###################################################
+    # G and h determine the inequality constraints in the
+    # form $G x \leq h$. We write $w_i \geq 0$ as $-1 \times x_i \leq 0$
+    # and also add a (superfluous) $x_i \leq 1$ constraint
+    ###################################################
+    # G x <= h
+    # -1  0  0  0 ... 0          0
+    #  1  0  0  0 ... 0          w_0
+    #  0 -1  0  0 ... 0          0
+    #  0  1  0  0 ... 0          w_1
+    #  0  0 -1  0 ... 0
+    #  0  0  1  0 ... 0
+    ###################################################
+    G = cvxopt.matrix(
+                [ [ (-1.0 if (i==j) else 0.0) for i in range(n) ] for j in range(n) ] +
+                [ [ ( 1.0 if (i==j) else 0.0) for i in range(n) ] for j in range(n) ] +
+                map(lambda ig_set: map(lambda s: 1.0 if (s in ig_set) else 0.0, symbol_list), industry_groups_list)
+                ).trans()
+    h = cvxopt.matrix( [ 0.0 for i in range(n) ] + [ 0.0 if expected_rtn_list[i] < min_exp_rtn else max_weight_list[i] for i in range(n) ] + map(lambda x: max_weight_industry, industry_groups_list) )
+    ###################################################
+
+    # A and b determine the equality constraints defined as A x = b
+    A = cvxopt.matrix([[ 1.0 for i in range(n) ]]).trans()
+    b = cvxopt.matrix([ 1.0 ])
+
+    solvers.options['show_progress'] = False
+    try:
+        sol = solvers.qp(P, q, G, h, A, b)
+    except:
+        return None
+
+    if sol['status'] != 'optimal':
+        return None
+
+    return {'result': sol }
+
 def log_optimal_growth(symbol_list,expected_rtn_list,cov_matrix,max_weight_list,industry_groups_list,max_weight_industry,portfolio_change_inertia=None,hatred_for_small_size=None,current_weight_list=None):
     def iif(cond, iftrue=1.0, iffalse=0.0):
         if cond:
@@ -582,3 +639,122 @@ def get_industry_groups(industry_group_list):
     for grp, it_lstup in groupby(sorted(industry_group_list, key=lambda x: x[1]), lambda x: x[1]):
         industry_groups_set_list.append(set(map(lambda x: x[0], list(it_lstup))))
     return industry_groups_set_list
+
+###################################################
+def get_port_and_hdg_cov_matrix(aug_cov_matrix,sol_list,hedging_symbol_list):
+    # print "aug_cov_matrix: %s" % aug_cov_matrix
+    # print "sol_list: %s" % sol_list
+    h_n = len(hedging_symbol_list)
+    s_n = len(sol_list)
+    m = aug_cov_matrix
+    for i in range(h_n):
+        m = np.delete(m, 0, 0)
+        m = np.delete(m, 0, 1)
+
+    sol_vec = np.asarray(sol_list)
+    sol_vec_T = np.matrix(sol_vec).T
+
+    var_port = float((sol_vec * m) * sol_vec_T)
+    sd_port = math.sqrt(var_port)
+    # print "sd_port: %s" % sd_port
+
+    cov_port_hedge_list = []
+    for h in range(h_n):
+        cov_port_hedge_list.append(sum(map(lambda x: float(x[0])*float(x[1]), zip(aug_cov_matrix.tolist()[h][h_n:],sol_list))))
+
+    sd1=math.sqrt(aug_cov_matrix.tolist()[0][0])
+    # print "sd(hedge): %s" % sd1
+    # print "correl_port_hedge: %s" % (cov_port_hedge_list[0]/sd1/sd_port)
+    cov_matrix_hedge = map(lambda x: x[:-s_n], aug_cov_matrix.tolist()[:-s_n])
+
+    cov_matrix_port_hedge = []
+    cov_matrix_port_hedge.append([var_port] + cov_port_hedge_list)
+
+    for i in range(h_n):
+        cov_matrix_port_hedge.append([cov_port_hedge_list[i]] + cov_matrix_hedge[i])
+
+    return np.asarray(cov_matrix_port_hedge)
+
+
+def risk_adj_rtn_hedge(expected_rtn_list,cov_matrix,sharpe_risk_aversion_factor):
+    def iif(cond, iftrue=1.0, iffalse=0.0):
+        if cond:
+            return iftrue
+        else:
+            return iffalse
+
+    n = len(expected_rtn_list)-1
+
+    ###################################################
+    # P and q determine the objective function to minimize
+    # which in cvxopt is defined as $.5 x^T P x + q^T x$
+    P = cvxopt.matrix(2.0 * sharpe_risk_aversion_factor * cov_matrix)
+    q = cvxopt.matrix(map(lambda x: -x, expected_rtn_list))
+
+    ###################################################
+    # G and h determine the inequality constraints in the
+    # form $G x \leq h$. We write $w_i \geq 0$ as $-1 \times x_i \leq 0$
+    # and also add a (superfluous) $x_i \leq 1$ constraint
+    ###################################################
+    # G x <= h
+    ###################################################
+    G = cvxopt.matrix(
+                [[( 1.0 if j==i else 0.0) for j in range(n+1)] for i in range(n+1)] +
+                [[(-1.0 if j==i else 0.0) for j in range(n+1)] for i in range(n+1)]
+                ).trans()
+    h = cvxopt.matrix([1.0] + n * [0.0] + [-1.0] + n * [1.0])
+    ###################################################
+
+    solvers.options['show_progress'] = False
+    try:
+        sol = solvers.qp(P, q, G, h)
+    except:
+        return None
+
+    if sol['status'] != 'optimal':
+        return None
+
+    return list(sol['x'])
+
+
+def log_optimal_hedge(expected_rtn_list,cov_matrix):
+    def iif(cond, iftrue=1.0, iffalse=0.0):
+        if cond:
+            return iftrue
+        else:
+            return iffalse
+
+    n = len(expected_rtn_list)-1
+
+    ###################################################
+    # P and q determine the objective function to minimize
+    # which in cvxopt is defined as $.5 x^T P x + q^T x$
+    P = cvxopt.matrix(cov_matrix)
+    q = cvxopt.matrix(map(lambda x: -x, expected_rtn_list))
+
+    ###################################################
+    # G and h determine the inequality constraints in the
+    # form $G x \leq h$. We write $w_i \geq 0$ as $-1 \times x_i \leq 0$
+    # and also add a (superfluous) $x_i \leq 1$ constraint
+    ###################################################
+    # G x <= h
+    ###################################################
+    G = cvxopt.matrix(
+                [[( 1.0 if j==i else 0.0) for j in range(n+1)] for i in range(n+1)] +
+                [[(-1.0 if j==i else 0.0) for j in range(n+1)] for i in range(n+1)]
+                ).trans()
+    h = cvxopt.matrix([1.0] + n * [0.0] + [-1.0] + n * [1.0])
+    ###################################################
+
+    solvers.options['show_progress'] = False
+    try:
+        sol = solvers.qp(P, q, G, h)
+    except:
+        return None
+
+    if sol['status'] != 'optimal':
+        return None
+
+    return list(sol['x'])
+
+

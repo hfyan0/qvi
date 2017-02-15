@@ -9,9 +9,9 @@ from itertools import groupby
 
 import os
 sys.path.append(os.path.dirname(sys.path[0]))
-from mvo import calc_cov_matrix_annualized,intWithCommas,justify_str,markowitz,markowitz_robust,log_optimal_growth,\
+from mvo import calc_cov_matrix_annualized,intWithCommas,justify_str,markowitz,markowitz_robust,markowitz_riskadj,log_optimal_growth,\
                 read_file,extract_sd_from_cov_matrix,calc_return_list,get_hist_data_key_date,get_hist_data_key_sym,calc_expected_return,\
-                get_industry_groups,preprocess_industry_groups
+                get_industry_groups,preprocess_industry_groups,get_port_and_hdg_cov_matrix,log_optimal_hedge,risk_adj_rtn_hedge
 
 ###################################################
 AUDIT_DELAY = 3.0
@@ -24,19 +24,18 @@ print "config," + str(config["general"]["init_capital"]) + "," + ','.join(map(la
 ###################################################
 traded_symbol_set = set(config["general"]["traded_symbols"])
 traded_symbol_list = sorted(config["general"]["traded_symbols"])
-hedging_symbol_list = config["general"]["hedging_symbols"]
+hedging_symbol_list = filter(lambda h: "expected_return_"+h in config_common["general"], config["general"]["hedging_symbols"])
 min_no_of_avb_sym = int(config["general"]["min_no_of_avb_sym"])
 rebalance_interval = int(config["general"]["rebalance_interval"])
 N = int(config["general"]["granularity"])
 max_weight_dict = config["max_weight"]
 
-er_hdg_dict = {}
-er_hdg_key_list = filter(lambda x: "expected_return_" in x, config_common["general"].keys())
+er_hedge_dict = {}
+for h in hedging_symbol_list:
+    v = config_common["general"]["expected_return_"+h]
+    er_hedge_dict[h] = sorted(map(lambda y: (datetime.strptime(y[1],"%Y-%m-%d").date(),float(y[2])), filter(lambda x: x[0]%2==0, zip(range(len(v)-1),v[:-1],v[1:]))), key=lambda x: x[0])
 
-for k,v in dict(map(lambda x: (config_common["general"][x][0], config_common["general"][x][1:]), er_hdg_key_list)).items():
-    er_hdg_dict[k] = sorted(map(lambda y: (datetime.strptime(y[1],"%Y-%m-%d").date(),float(y[2])), filter(lambda x: x[0]%2==0, zip(range(len(v)-1),v[:-1],v[1:]))), key=lambda x: x[0])
-
-print '\n'.join(map(str, er_hdg_dict.items()))
+# print '\n'.join(map(str, er_hedge_dict.items()))
 
 
 hsi_hhi_constituents_list = map(lambda x: (x[0],datetime.strptime(x[1],"%Y-%m-%d").date(),datetime.strptime(x[2],"%Y-%m-%d").date()), read_file(config_common["general"]["hsi_hhi_constituents"]))
@@ -96,13 +95,10 @@ for dt in rebalance_date_list:
     # print str(dt) + ": " + ', '.join(map(lambda x: x[0]+":["+str(round(x[1],3))+"]:a_"+str(round(x[2],3))+";e_"+str(round(x[3],3))+";b_"+str(round(x[4],3)), zip(symbol_list,expected_rtn_list,expected_rtn_asset_driver_list,expected_rtn_external_driver_list,expected_rtn_bv_list)))
 
     ###################################################
-    hsi_expected_return = filter(lambda x: x[0] <= dt, hsi_expected_return_list)[-1][1]
-    if config["general"]["hedging_type"].lower() == "toge":
-        max_weight_list = map(lambda x: 1.0, hedging_symbol_list) + map(lambda x: float(max_weight_dict.get(x,max_weight_dict["single_name"])), symbol_list)
-        symbol_list = hedging_symbol_list + symbol_list
-        expected_rtn_list = (len(hedging_symbol_list) * [hsi_expected_return/100.0]) + expected_rtn_list
-    else:
-        max_weight_list = map(lambda x: float(max_weight_dict.get(x,max_weight_dict["single_name"])), symbol_list)
+    hedge_expected_rtn_dict = dict(map(lambda h: (h[0], filter(lambda d: d[0] <= dt, h[1])[-1][1]), er_hedge_dict.items()))
+    # print dt, hedge_expected_rtn_dict
+
+    max_weight_list = map(lambda x: float(max_weight_dict.get(x,max_weight_dict["single_name"])), symbol_list)
     from_tgt_rtn = min(expected_rtn_list)
     to_tgt_rtn = max(expected_rtn_list)
 
@@ -110,18 +106,14 @@ for dt in rebalance_date_list:
     specific_riskiness_list = len(hedging_symbol_list+symbol_list) * [0.0]
     hist_adj_px_list_fil_sorted = sorted(filter(lambda x: x[0] <= dt, hist_adj_px_list_sorted), key=lambda y: y[0])
     sym_time_series_list = map(lambda s: map(lambda ts: (ts[0],ts[2]), filter(lambda x: x[1] == s, hist_adj_px_list_fil_sorted)), symbol_list)
-    if config["general"]["hedging_type"].lower() == "toge":
-        aug_cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(sym_time_series_list, specific_riskiness_list)
-    else:
-        hedging_sym_time_series_list = map(lambda s: map(lambda ts: (ts[0],ts[2]), filter(lambda h: h[1] == s, hist_adj_px_list_fil_sorted)), hedging_symbol_list)
-        aug_cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(hedging_sym_time_series_list+sym_time_series_list, specific_riskiness_list)
+    hedging_sym_time_series_list = map(lambda s: map(lambda ts: (ts[0],ts[2]), filter(lambda h: h[1] == s, hist_adj_px_list_fil_sorted)), hedging_symbol_list)
+    aug_cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(hedging_sym_time_series_list+sym_time_series_list, specific_riskiness_list)
 
     cov_matrix = aug_cov_matrix
-    if config["general"]["hedging_type"].lower() != "toge":
-        for i in range(len(hedging_symbol_list)):
-            cov_matrix = np.delete(cov_matrix, 0, 0)
-            cov_matrix = np.delete(cov_matrix, 0, 1)
-        # print "aug_cov %s" % (aug_cov_matrix)
+    for i in range(len(hedging_symbol_list)):
+        cov_matrix = np.delete(cov_matrix, 0, 0)
+        cov_matrix = np.delete(cov_matrix, 0, 1)
+    # print "aug_cov %s" % (aug_cov_matrix)
     ###################################################
 
     ###################################################
@@ -133,7 +125,16 @@ for dt in rebalance_date_list:
     ###################################################
 
     ###################################################
-    if (config["general"]["construction_method"] == "markowitz_max_kelly_f") or (config["general"]["construction_method"] == "markowitz_max_sharpe"):
+    if config["general"]["construction_method"] == "markowitz_max_sharpe":
+        markowitz_max_sharpe_sol_list = markowitz_riskadj(symbol_list, expected_rtn_list, cov_matrix, max_weight_list, 0.0, industry_groups_list, float(config["max_weight"]["industry"]), float(config_common["general"]["sharpe_risk_aversion_factor"]))
+        if markowitz_max_sharpe_sol_list is None:
+            continue
+        markowitz_max_sharpe_sol_list = list(markowitz_max_sharpe_sol_list["result"]['x'])
+    ###################################################
+
+    ###################################################
+    # if (config["general"]["construction_method"] == "markowitz_max_kelly_f") or (config["general"]["construction_method"] == "markowitz_max_sharpe"):
+    if (config["general"]["construction_method"] == "markowitz_max_kelly_f"):
         markowitz_max_sharpe_sol_list = []
         markowitz_max_kelly_f_sol_list = []
         for i in range(N):
@@ -211,32 +212,30 @@ for dt in rebalance_date_list:
     most_correlated_idx_idx = sorted(enumerate(port_beta_list), key=lambda x: x[1])[-1][0]
     most_correlated_idx_sym = hedging_symbol_list[most_correlated_idx_idx]
 
-    h = -1.0
+    h_list = []
     if config["general"]["hedging_type"].lower() == "beta":
-        h = port_beta_list[most_correlated_idx_idx]
-        pos_dict[most_correlated_idx_sym] = -h * capital_to_use / hist_adj_px_dict[dt][most_correlated_idx_sym]
-    elif config["general"]["hedging_type"].lower() == "riskadj":
-        h = min(max(port_beta_list[most_correlated_idx_idx] - hsi_expected_return / 100.0 / 0.7, 0.0), 1.0)
-        pos_dict[most_correlated_idx_sym] = -h * capital_to_use / hist_adj_px_dict[dt][most_correlated_idx_sym]
-    elif config["general"]["hedging_type"].lower() == "logopt":
-        sol_vec = np.asarray(sol_list)
-        sol_vec_T = np.matrix(sol_vec).T
-        port_var = float((sol_vec * cov_matrix) * sol_vec_T)
-        hedge_var = aug_cov_matrix.tolist()[most_correlated_idx_idx][most_correlated_idx_idx]
+        h_list.append(port_beta_list[most_correlated_idx_idx])
+        pos_dict[most_correlated_idx_sym] = -h_list[0] * capital_to_use / hist_adj_px_dict[dt][most_correlated_idx_sym]
+    elif (config["general"]["hedging_type"].lower() == "riskadj") or (config["general"]["hedging_type"].lower() == "logopt"):
+        new_rtn_vec = ([sum(map(lambda x: x[0]*x[1], zip(expected_rtn_list,sol_list)))] + map(lambda hs: hedge_expected_rtn_dict[hs], hedging_symbol_list))
+        new_cov_matrix = get_port_and_hdg_cov_matrix(aug_cov_matrix,sol_list,hedging_symbol_list)
+        # print new_rtn_vec
+        # print new_cov_matrix
+        # print hedging_symbol_list
+        if config["general"]["hedging_type"].lower() == "riskadj":
+            h_sol_vec = risk_adj_rtn_hedge(new_rtn_vec,new_cov_matrix,float(config_common["general"]["sharpe_risk_aversion_factor"]))
+        elif config["general"]["hedging_type"].lower() == "logopt":
+            h_sol_vec = log_optimal_hedge(new_rtn_vec,new_cov_matrix)
 
-        hv_list = []
-        for i in range(100):
-            h_tmp = -float(i)/100.0
-            hv_list.append((h_tmp, h_tmp * hsi_expected_return - ((port_var + h_tmp*h_tmp*hedge_var + 2*h_tmp*port_beta_list[most_correlated_idx_idx]*hedge_var) / 2 / math.pow(1+h_tmp,2))))
+        for h_idx,h_weight in enumerate(h_sol_vec[1:]):
+            pos_dict[hedging_symbol_list[h_idx]] = h_weight * capital_to_use / hist_adj_px_dict[dt][hedging_symbol_list[h_idx]]
+        h_list = map(lambda x: -x, h_sol_vec[1:])
 
-        # print "hv_list: %s" % hv_list
-        h = -sorted(hv_list, key=lambda x: x[1])[-1][0]
-        pos_dict[most_correlated_idx_sym] = -h * capital_to_use / hist_adj_px_dict[dt][most_correlated_idx_sym]
     elif config["general"]["hedging_type"].lower() == "half":
-        h = 0.5
-        pos_dict[most_correlated_idx_sym] = -h * capital_to_use / hist_adj_px_dict[dt][most_correlated_idx_sym]
+        h_list.append(0.5)
+        pos_dict[most_correlated_idx_sym] = -h_list[0] * capital_to_use / hist_adj_px_dict[dt][most_correlated_idx_sym]
     ###################################################
     # print "mkt val of pos: %s" % sum([hist_adj_px_dict[dt][s]*pos for s,pos in pos_dict.items()])
-    print str(dt)+","+str(round(cash,0))+","+','.join(map(str,map(lambda x: round(x,5), port_beta_list)))+","+most_correlated_idx_sym+","+str(round(h,5))+",["+str(len(sym_weight_dict))+"],"+','.join(map(lambda x: ':'.join(x), sym_px_weight_list))+','+",".join(map(lambda x: "pos_"+x[0]+'_'+str(x[1]), pos_dict.items()))
+    print str(dt)+","+str(round(cash,0))+","+','.join(map(str,map(lambda x: round(x,5), port_beta_list)))+","+most_correlated_idx_sym+","+'_'.join(map(lambda x: str(round(x,5)), h_list))+",["+str(len(sym_weight_dict))+"],"+','.join(map(lambda x: ':'.join(x), sym_px_weight_list))+','+",".join(map(lambda x: "pos_"+x[0]+'_'+str(x[1]), pos_dict.items()))
     cash -= float(sum([hist_adj_px_dict[dt].get(s,filter(lambda x: x[1]==s, hist_adj_px_list_sorted)[-1][2])*pos for s,pos in pos_dict.items()]))
     ###################################################
