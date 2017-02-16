@@ -11,7 +11,7 @@ import os
 sys.path.append(os.path.dirname(sys.path[0]))
 from mvo import calc_cov_matrix_annualized,intWithCommas,justify_str,markowitz,markowitz_robust,markowitz_sharpe,log_optimal_growth,\
                 read_file,extract_sd_from_cov_matrix,calc_return_list,get_hist_data_key_date,get_hist_data_key_sym,calc_expected_return,\
-                get_industry_groups,preprocess_industry_groups,get_port_and_hdg_cov_matrix,log_optimal_hedge,sharpe_hedge
+                get_industry_groups,preprocess_industry_groups,get_port_and_hdg_cov_matrix,log_optimal_hedge,sharpe_hedge,minvar_hedge
 
 ###################################################
 AUDIT_DELAY = 3.0
@@ -216,7 +216,7 @@ for dt in rebalance_date_list:
     if config["general"]["hedging_type"].lower() == "beta":
         h_list.append(port_beta_list[most_correlated_idx_idx])
         pos_dict[most_correlated_idx_sym] = -h_list[0] * capital_to_use / hist_adj_px_dict[dt][most_correlated_idx_sym]
-    elif (config["general"]["hedging_type"].lower() == "sharpe") or (config["general"]["hedging_type"].lower() == "logopt"):
+    elif (config["general"]["hedging_type"].lower() == "minvar") or (config["general"]["hedging_type"].lower() == "sharpe") or (config["general"]["hedging_type"].lower() == "logopt"):
         new_rtn_vec = ([sum(map(lambda x: x[0]*x[1], zip(expected_rtn_list,sol_list)))] + map(lambda hs: hedge_expected_rtn_dict[hs], hedging_symbol_list))
         new_cov_matrix = get_port_and_hdg_cov_matrix(aug_cov_matrix,sol_list,hedging_symbol_list)
         # print new_rtn_vec
@@ -227,6 +227,8 @@ for dt in rebalance_date_list:
             h_sol_vec = sharpe_hedge(new_rtn_vec,new_cov_matrix)
         elif config["general"]["hedging_type"].lower() == "logopt":
             h_sol_vec = log_optimal_hedge(new_rtn_vec,new_cov_matrix)
+        elif config["general"]["hedging_type"].lower() == "minvar":
+            h_sol_vec = minvar_hedge(new_rtn_vec,new_cov_matrix)
 
         for h_idx,h_weight in enumerate(h_sol_vec[1:]):
             pos_dict[hedging_symbol_list[h_idx]] = h_weight * capital_to_use / hist_adj_px_dict[dt][hedging_symbol_list[h_idx]]

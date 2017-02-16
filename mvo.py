@@ -815,3 +815,33 @@ def sharpe_hedge(expected_rtn_list,cov_matrix):
     sy = sum(y_list)
     return map(lambda y: y / sy, y_list)
 
+def minvar_hedge(expected_rtn_list,cov_matrix):
+    n = len(expected_rtn_list)-1
+
+    ###################################################
+    # P and q determine the objective function to minimize
+    # which in cvxopt is defined as $.5 x^T P x + q^T x$
+    P = cvxopt.matrix(cov_matrix)
+    q = cvxopt.matrix([0.0] * (n+1))
+
+    ###################################################
+    # G x <= h
+    ###################################################
+    G = cvxopt.matrix(
+                [[( 1.0 if j==i else 0.0) for j in range(n+1)] for i in range(n+1)] +
+                [[(-1.0 if j==i else 0.0) for j in range(n+1)] for i in range(n+1)]
+                ).trans()
+    h = cvxopt.matrix([1.0] + n * [0.0] + [-1.0] + n * [1.0])
+    ###################################################
+
+    solvers.options['show_progress'] = False
+    try:
+        sol = solvers.qp(P, q, G, h)
+    except:
+        return None
+
+    if sol['status'] != 'optimal':
+        return None
+
+    return list(sol['x'])
+
