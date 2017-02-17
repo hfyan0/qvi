@@ -467,7 +467,8 @@ def calc_expected_return(config,dt,symbol_list,hist_bps_dict,hist_unadj_px_dict,
         # annualization factor
         ###################################################
         oper_date_list = sorted(list(set(map(lambda x: x[0], oper_incm_list))))
-        print "oper_date_list: %s" % oper_date_list
+        if debug_mode:
+            print "oper_date_list: %s" % oper_date_list
         annualization_factor = get_annualization_factor(oper_date_list)
         ###################################################
 
