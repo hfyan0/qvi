@@ -96,17 +96,17 @@ def get_annualization_factor(date_list):
     if len(date_list) < 3:
         return 0.0
     else:
-        dl = map(lambda x: (x[0]-x[1]).days, zip(date_list[1:],date_list[:-1]))
-        avg_diff = sum(dl)/len(dl)
-        if avg_diff <= 4:
+        dl = sorted(map(lambda x: (x[0]-x[1]).days, zip(date_list[1:],date_list[:-1])))
+        median_diff = (dl[(len(dl)/2)-1] + dl[(len(dl)/2)])/2.0
+        if median_diff <= 4:
             return 252
-        elif avg_diff <= 7:
+        elif median_diff <= 7:
             return 52
-        elif avg_diff <= 35:
+        elif median_diff <= 35:
             return 12
-        elif avg_diff <= 30*3:
+        elif median_diff <= 30*3:
             return 4
-        elif avg_diff <= 30*6:
+        elif median_diff <= 35*6:
             return 2
         else:
             return 1
