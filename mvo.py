@@ -93,18 +93,23 @@ def calc_sd(ts):
         return np.std(np.asarray(r_ls))
 
 def get_annualization_factor(date_list):
-    if len(date_list) < 30:
-        return 9999.9
+    if len(date_list) < 3:
+        return 0.0
     else:
-        min_diff = min(map(lambda x: (x[0]-x[1]).days, zip(date_list[1:],date_list[:-1])))
-        if min_diff <= 4:
+        dl = map(lambda x: (x[0]-x[1]).days, zip(date_list[1:],date_list[:-1]))
+        avg_diff = sum(dl)/len(dl)
+        if avg_diff <= 4:
             return 252
-        elif min_diff >= 5 and min_diff <= 7:
+        elif avg_diff <= 7:
             return 52
-        elif min_diff >= 20 and min_diff <= 31:
+        elif avg_diff <= 35:
             return 12
+        elif avg_diff <= 30*3:
+            return 4
+        elif avg_diff <= 30*6:
+            return 2
         else:
-            return 252
+            return 1
 
 def calc_cov_matrix_annualized(sym_time_series_list, specific_riskiness_list):
     ###################################################
@@ -461,11 +466,9 @@ def calc_expected_return(config,dt,symbol_list,hist_bps_dict,hist_unadj_px_dict,
         ###################################################
         # annualization factor
         ###################################################
-        oper_date_list = map(lambda x: x[0], oper_incm_list)
-        if len(oper_date_list) >= 3:
-            annualization_factor = round(365.0/min(map(lambda x: (x[0]-x[1]).days, zip(oper_date_list[1:],oper_date_list[:-1]))),0)
-        else:
-            annualization_factor = 0.0
+        oper_date_list = sorted(list(set(map(lambda x: x[0], oper_incm_list))))
+        print "oper_date_list: %s" % oper_date_list
+        annualization_factor = get_annualization_factor(oper_date_list)
         ###################################################
 
         ###################################################
