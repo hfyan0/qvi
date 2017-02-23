@@ -782,9 +782,8 @@ def sharpe_hedge(expected_rtn_list,cov_matrix):
     # which in cvxopt is defined as $.5 x^T P x + q^T x$
 
     ###################################################
-    P = cvxopt.matrix(cov_matrix)
+    P = cvxopt.matrix(2.0 * cov_matrix)
     q = cvxopt.matrix([0.0 for i in range(n+1)])
-
     ###################################################
     # G x <= h
     ###################################################
