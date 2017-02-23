@@ -23,10 +23,10 @@ RTN_DAY = 365*1 # calendar day
 
 data_path="/home/qy/Dropbox/nirvana/mvo/data/"
 
-file_dps      = data_path+"hist_trail12m_dps.csv"
-file_eps      = data_path+"hist_trail12m_eps.csv"
-file_px       = data_path+"hist_last_px.csv"
-file_best_eps = data_path+"hist_best_eps.csv"
+file_dps      = data_path+"hist_idx_trail12m_dps.csv"
+file_eps      = data_path+"hist_idx_trail12m_eps.csv"
+file_px       = data_path+"hist_idx_last_px.csv"
+file_best_eps = data_path+"hist_idx_best_eps.csv"
 
 dps_key_sym_dict       = get_hist_data_key_sym(file_dps)
 eps_key_sym_dict       = get_hist_data_key_sym(file_eps)
