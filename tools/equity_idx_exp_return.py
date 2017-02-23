@@ -36,5 +36,7 @@ for dt in date_list:
 
     sqrt_det = math.sqrt(math.pow(P - g * B - (1+g) * E, 2.0) + 4 * (1+g) * P * E)
     n_b = g * B + (1-g) * E - P
-    exp_rtn = min(filter(lambda x: x >= 0.0, map(lambda x: x / 2.0 / P, [n_b + sqrt_det, n_b - sqrt_det])))
-    print ','.join(map(str, [dt,exp_rtn]))
+    exp_rtn_list = filter(lambda x: x > 0.0, map(lambda x: x / 2.0 / P, [n_b + sqrt_det, n_b - sqrt_det]))
+    if len(exp_rtn_list) > 0:
+        exp_rtn = min(exp_rtn_list)
+        print ','.join(map(str, [dt,exp_rtn,g,B,E,P]))
