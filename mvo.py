@@ -848,3 +848,21 @@ def minvar_hedge(expected_rtn_list,cov_matrix):
 
     return list(sol['x'])
 
+def cal_irr_mean_var(mean_list,sd_list,corr_matrix,cov_matrix):
+    N = len(mean_list)-1
+    G = 1.0+np.irr(mean_list)
+    D = sum([mean_list[i] * (N-i) * math.pow(G,N-i-1) for i in range(N+1)])
+    G_prime_list = [-math.pow(G,N-i)/D for i in range(N+1)]
+    partial_D_partial_G = sum([mean_list[i] * (N-i) * (N-i-1) * math.pow(G,N-i-2) for i in range(N+1)])
+    partial_D_partial_x_list = [math.pow(G,N-i-1) * (N-i) + partial_D_partial_G * G_prime_list[i] for i in range(N+1)]
+    sec_derivative_G = [[-(N-k)*math.pow(G,N-k-1)/D*G_prime_list[j] + math.pow(G,N-k)/D/D*partial_D_partial_x_list[j] for j in range(N+1)] for k in range(N+1)]
+    if corr_matrix is not None:
+        EG = G + sum([sec_derivative_G[j][k] * corr_matrix[j][k]*sd_list[j]*sd_list[k] for j in range(N+1) for k in range(N+1)])/2.0
+        VG = sum([G_prime_list[j] * G_prime_list[k] * corr_matrix[j][k]*sd_list[j]*sd_list[k] for j in range(N+1) for k in range(N+1)])
+    elif cov_matrix is not None:
+        EG = G + sum([sec_derivative_G[j][k] * cov_matrix[j][k] for j in range(N+1) for k in range(N+1)])/2.0
+        VG = sum([G_prime_list[j] * G_prime_list[k] * cov_matrix[j][k] for j in range(N+1) for k in range(N+1)])
+    EIRR = EG - 1.0
+    VIRR = VG
+    SIRR = math.sqrt(VIRR)
+    return EIRR,SIRR
