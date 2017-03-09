@@ -8,7 +8,7 @@ import numpy as np
 import os
 sys.path.append(os.path.dirname(sys.path[0]))
 from mvo import CurrencyConverter,calc_cov_matrix_annualized,intWithCommas,justify_str,\
-                markowitz_sharpe,log_optimal_growth,read_file,calc_expected_return,\
+                markowitz_sharpe,log_optimal_growth,read_file,calc_expected_return_before_201703,\
                 get_hist_data_key_sym,get_industry_groups,preprocess_industry_groups
 
 ###################################################
@@ -65,7 +65,7 @@ time_check_printout.append("Reading config: %s" % (datetime.now()-time_check))
 print "Start calculating expected return:"
 time_check = datetime.now()
 
-expected_rtn_list = calc_expected_return(config_common,datetime.now().date(),symbol_list,hist_bps_dict,hist_unadj_px_dict,hist_operincm_dict,hist_totasset_dict,hist_totliabps_dict,hist_costofdebt_dict,hist_stattaxrate_dict,hist_oper_eps_dict,hist_eps_dict,hist_roa_dict,0,True)
+expected_rtn_list = calc_expected_return_before_201703(config_common,datetime.now().date(),symbol_list,hist_bps_dict,hist_unadj_px_dict,hist_operincm_dict,hist_totasset_dict,hist_totliabps_dict,hist_costofdebt_dict,hist_stattaxrate_dict,hist_oper_eps_dict,hist_eps_dict,hist_roa_dict,0,True)
 expected_rtn_dict = dict(map(lambda x: tuple(x), zip(symbol_list,expected_rtn_list)))
 
 ###################################################

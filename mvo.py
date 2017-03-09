@@ -6,8 +6,11 @@ import cvxopt
 from cvxopt import blas, solvers
 from datetime import datetime, timedelta
 import scipy.optimize
-from itertools import groupby
+import itertools
+import random
+import time
 
+random.seed(time.time())
 ###################################################
 LOOKBACK_DAYS = 378 # Most recent (for correl)
 ###################################################
@@ -44,13 +47,13 @@ def justify_str(s,totlen,left_right="right",padchar=' '):
 ###################################################
 def get_hist_data_key_date(filename):
     rtn_dict = {}
-    for d,it_lstup in groupby(sorted(read_file(filename), key=lambda x: x[0]), lambda x: x[0]):
+    for d,it_lstup in itertools.groupby(sorted(read_file(filename), key=lambda x: x[0]), lambda x: x[0]):
         rtn_dict[datetime.strptime(d,"%Y-%m-%d").date()] = dict(map(lambda y: (y[1],float(y[2])), filter(lambda x: abs(float(x[2])) > 0.0001, list(it_lstup))))
     return rtn_dict
 
 def get_hist_data_key_sym(filename):
     rtn_dict = {}
-    for s,it_lstup in groupby(sorted(read_file(filename), key=lambda x: x[1]), lambda x: x[1]):
+    for s,it_lstup in itertools.groupby(sorted(read_file(filename), key=lambda x: x[1]), lambda x: x[1]):
         rtn_dict[s] = sorted(map(lambda y: (datetime.strptime(y[0],"%Y-%m-%d").date(),float(y[2])), filter(lambda x: abs(float(x[2])) > 0.0001, list(it_lstup))), key=lambda x: x[0])
     return rtn_dict
 
@@ -127,14 +130,14 @@ def calc_cov_matrix_annualized(sym_time_series_list, specific_riskiness_list):
     correl_matrix = np.asmatrix(correl_matrix)
 
     np.set_printoptions(precision=5,suppress=True)
-    if len(correl_matrix.tolist()) < 6:
-        print
-        print "correl_matrix"
-        for row in correl_matrix.tolist():
-            for element in row:
-                str_element = str(round(element,3))
-                sys.stdout.write(justify_str(str_element,8))
-            sys.stdout.write('\n')
+    # if len(correl_matrix.tolist()) < 6:
+    #     print
+    #     print "correl_matrix"
+    #     for row in correl_matrix.tolist():
+    #         for element in row:
+    #             str_element = str(round(element,3))
+    #             sys.stdout.write(justify_str(str_element,8))
+    #         sys.stdout.write('\n')
 
     ###################################################
     # covariance matrix
@@ -377,7 +380,7 @@ def markowitz_robust(symbol_list,expected_rtn_list,cov_matrix,mu_p,max_weight_li
 
 ###################################################
 
-def calc_expected_return(config,dt,symbol_list,hist_bps_dict,hist_unadj_px_dict,hist_operincm_dict,hist_totasset_dict,hist_totliabps_dict,hist_costofdebt_dict,hist_stattaxrate_dict,hist_oper_eps_dict,hist_eps_dict,hist_roa_dict,delay_months,debug_mode):
+def calc_expected_return_before_201703(config,dt,symbol_list,hist_bps_dict,hist_unadj_px_dict,hist_operincm_dict,hist_totasset_dict,hist_totliabps_dict,hist_costofdebt_dict,hist_stattaxrate_dict,hist_oper_eps_dict,hist_eps_dict,hist_roa_dict,delay_months,debug_mode):
     curcy_converter = CurrencyConverter(config["currency_rate"])
     ###################################################
     # book-to-price
@@ -635,6 +638,187 @@ def calc_expected_return(config,dt,symbol_list,hist_bps_dict,hist_unadj_px_dict,
 
     return expected_rtn_list
 
+
+def cal_irr_mean_var_Reinschmidt(mean_list,sd_list,corr_matrix,cov_matrix):
+    N = len(mean_list)-1
+    G = 1.0+np.irr(mean_list)
+    D = sum([mean_list[i] * (N-i) * math.pow(G,N-i-1) for i in range(N+1)])
+    G_prime_list = [-math.pow(G,N-i)/D for i in range(N+1)]
+    partial_D_partial_G = sum([mean_list[i] * (N-i) * (N-i-1) * math.pow(G,N-i-2) for i in range(N+1)])
+    partial_D_partial_x_list = [math.pow(G,N-i-1) * (N-i) + partial_D_partial_G * G_prime_list[i] for i in range(N+1)]
+    sec_derivative_G = [[-(N-k)*math.pow(G,N-k-1)/D*G_prime_list[j] + math.pow(G,N-k)/D/D*partial_D_partial_x_list[j] for j in range(N+1)] for k in range(N+1)]
+    if corr_matrix is not None:
+        EG = G + sum([sec_derivative_G[j][k] * corr_matrix[j][k]*sd_list[j]*sd_list[k] for j in range(N+1) for k in range(N+1)])/2.0
+        VG = sum([G_prime_list[j] * G_prime_list[k] * corr_matrix[j][k]*sd_list[j]*sd_list[k] for j in range(N+1) for k in range(N+1)])
+    elif cov_matrix is not None:
+        EG = G + sum([sec_derivative_G[j][k] * cov_matrix[j][k] for j in range(N+1) for k in range(N+1)])/2.0
+        VG = sum([G_prime_list[j] * G_prime_list[k] * cov_matrix[j][k] for j in range(N+1) for k in range(N+1)])
+    EIRR = EG - 1.0
+    VIRR = VG
+    SIRR = math.sqrt(VIRR)
+    return EIRR,SIRR
+
+
+def find_all_roots_brentq(f, a, b, pars=(), min_window=0.0001):
+    try:
+        one_root = scipy.optimize.brentq(f, a, b, pars)
+        # print "Root at %g in [%g,%g] interval" % (one_root, a, b)
+    except ValueError:
+        # print "No root in [%g,%g] interval" % (a, b)
+        return [] # No root in the interval
+
+    if one_root-min_window>a:
+        lesser_roots_list = [one_root] + find_all_roots_brentq(f, a, one_root-min_window, pars)
+    else:
+        lesser_roots_list = []
+
+    if one_root+min_window<b:
+        greater_roots_list = [one_root] + find_all_roots_brentq(f, one_root+min_window, b, pars)
+    else:
+        greater_roots_list = []
+
+    return lesser_roots_list + [one_root] + greater_roots_list
+
+
+def adj_irr_by_cf_time(irr_with_1st_cf_in_1yr, time_b4_1st_cf):
+    if irr_with_1st_cf_in_1yr is None or time_b4_1st_cf is None:
+        return None
+    def f(irr_with_1st_cf_in_lessthan1yr, irr_with_1st_cf_in_1yr, time_b4_1st_cf):
+        return math.pow(1.0+irr_with_1st_cf_in_lessthan1yr,1.0-time_b4_1st_cf)/irr_with_1st_cf_in_lessthan1yr-(1.0/irr_with_1st_cf_in_1yr)
+    if irr_with_1st_cf_in_1yr > 0:
+        return list(set(find_all_roots_brentq(f, 0.001, 1, pars=(irr_with_1st_cf_in_1yr, time_b4_1st_cf))))[0]
+    else:
+        return list(set(find_all_roots_brentq(f, -1, -0.001, pars=(irr_with_1st_cf_in_1yr, time_b4_1st_cf))))[0]
+
+def cal_irr_mean_ci_MonteCarlo(cur_px,next_eps,sigma,bps,num_terms,num_times_montecarlo,confidence_interval):
+    irr_result_list = []
+    for _ in itertools.repeat(None, num_times_montecarlo):
+        rand_eps_chg_list = np.random.normal(0, sigma, num_terms).tolist()
+
+        eps_rlzn_list = map(lambda x: next_eps + sum(rand_eps_chg_list[:x]), range(num_terms))
+
+        dvd_rlzn_list = []
+        for i in range(num_terms):
+            if eps_rlzn_list[i] > 0.0:
+                dvd = max(sum(eps_rlzn_list[:(i+1)]) - sum(dvd_rlzn_list), 0.0)
+                dvd_rlzn_list.append(dvd)
+            else:
+                if (sum(eps_rlzn_list) - sum(dvd_rlzn_list) < bps):
+                    break
+                else:
+                    dvd_rlzn_list.append(0.0)
+
+        irr = np.irr([-cur_px] + dvd_rlzn_list)
+        if not math.isnan(irr):
+            irr_result_list.append(round(irr,5))
+    sorted_irr_list = sorted(irr_result_list)
+    if len(sorted_irr_list) < 30:
+        return None,None,None
+    ci_leftside_pctg = (100.0-confidence_interval)/2.0/100.0
+    ci_rightside_pctg = 1.0 - ci_leftside_pctg
+
+    irr_mean = round(sum(sorted_irr_list)/len(sorted_irr_list),5)
+    # irr_median = sorted_irr_list[len(sorted_irr_list)/2]
+    irr_5pctl = sorted_irr_list[int(len(sorted_irr_list)*ci_leftside_pctg)]
+    irr_95pctl = sorted_irr_list[int(len(sorted_irr_list)*ci_rightside_pctg)]
+    irr_true_mean = next_eps/cur_px
+    irr_true_5pctl = irr_true_mean - (irr_mean - irr_5pctl)
+    irr_true_95pctl = irr_true_mean - (irr_mean - irr_95pctl)
+    return [irr_true_mean,irr_true_5pctl,irr_true_95pctl]
+
+def calc_irr_mean_ci(config,dt,symbol,ann_sd_sym_rtn,hist_unadj_px_dict,hist_eps_dict,hist_bps_dict,delay_months,debug_mode):
+    irr_mean_ci_tuple = [None,None,None]
+
+    curcy_converter = CurrencyConverter(config["currency_rate"])
+
+    if debug_mode:
+        print "symbol: %s" % symbol
+
+    reporting_curcy_conv_rate = curcy_converter.get_conv_rate_to_hkd(config["reporting_currency"].get(symbol,config["reporting_currency"]["default"]),dt)
+    price_curcy_conv_rate = curcy_converter.get_conv_rate_to_hkd(config["price_currency"].get(symbol,config["price_currency"]["default"]),dt)
+    # print symbol,dt,reporting_curcy_conv_rate
+
+    bps_list = map(lambda z: z[1], filter(lambda x: x[0] <= shift_back_n_months(dt,delay_months), hist_bps_dict.get(symbol,[])))
+    if len(bps_list) == 0:
+        return irr_mean_ci_tuple
+    else:
+        bps = bps_list[-1]
+
+    next_cf_dt_list = map(lambda x: x[0], filter(lambda y: y[0] > shift_back_n_months(dt,5*12+delay_months), filter(lambda x: x[0] <= shift_back_n_months(dt,delay_months), hist_eps_dict.get(symbol,[]))))
+    time_to_next_cf = 1.0 if (len(next_cf_dt_list) == 0) else (((next_cf_dt_list[-1] + timedelta(weeks = 52)) - dt).days / 365.0)
+
+    if debug_mode:
+        print "--------------------------------------------------"
+        print "symbol: %s" % symbol
+        print "--------------------------------------------------"
+
+    if symbol not in hist_unadj_px_dict[dt]:
+        print "--------------------------------------------------"
+        print "No unadj price: %s" % symbol
+        print "--------------------------------------------------"
+        return irr_mean_ci_tuple
+
+    reporting_curcy_conv_rate = curcy_converter.get_conv_rate_to_hkd(config["reporting_currency"].get(symbol,config["reporting_currency"]["default"]),dt)
+    price_curcy_conv_rate = curcy_converter.get_conv_rate_to_hkd(config["price_currency"].get(symbol,config["price_currency"]["default"]),dt)
+
+    ###################################################
+    eps_list = filter(lambda y: y[0] > shift_back_n_months(dt,12*4+delay_months), filter(lambda x: x[0] <= shift_back_n_months(dt,delay_months), hist_eps_dict.get(symbol,[])))
+
+    ###################################################
+    # annualization factor
+    ###################################################
+    eps_dt_list = sorted(list(set(map(lambda x: x[0], eps_list))))
+    if debug_mode:
+        print "eps_dt_list: %s" % eps_dt_list
+    annualization_factor = get_annualization_factor(eps_dt_list)
+    ###################################################
+
+    ###################################################
+    if len(eps_list) > 0:
+        one_yr_dt_bound = eps_list[-1][0] - timedelta(weeks = float(52.0/12.0*13.0))
+        cur_yr_eps = sum(map(lambda x: x[1], filter(lambda x: x[0] >= one_yr_dt_bound, eps_list)))
+    else:
+        cur_yr_eps = 0.0
+
+    if len(eps_list) >= 5:
+        eps_list = map(lambda x: x[1], eps_list)
+        eps_chg_list = map(lambda x: x[1]-x[0], zip(eps_list[:-1],eps_list[1:]))
+        eps_chg_list = sorted(eps_chg_list)[1:][:-1]
+
+        m = sum(eps_chg_list)/len(eps_chg_list)
+        sd = np.std(np.asarray(eps_chg_list))
+
+        ann_sd = math.sqrt(annualization_factor) * sd
+
+        if debug_mode:
+            print "eps_list: %s" % eps_list
+            print "annualization_factor: %s" % annualization_factor
+            print "m: %s" % m
+            print "sd: %s" % sd
+            print "ann_sd: %s" % ann_sd
+    else:
+        ann_sd = 0.0
+
+    next_eps = cur_yr_eps
+
+    if debug_mode:
+        print "next_eps: %s" % next_eps
+
+    next_eps_sd = next_eps * ann_sd_sym_rtn
+    # next_eps_sd = ann_sd
+    irr_mean_ci_tuple = cal_irr_mean_ci_MonteCarlo(hist_unadj_px_dict[dt][symbol],
+                                                   next_eps,
+                                                   next_eps_sd,
+                                                   bps,
+                                                   # 100,
+                                                   10,
+                                                   1000,
+                                                   95)
+    if irr_mean_ci_tuple is not None:
+        irr_mean_ci_tuple = map(lambda x: adj_irr_by_cf_time(x, time_to_next_cf), irr_mean_ci_tuple)
+
+    return irr_mean_ci_tuple
+
 def preprocess_industry_groups(industry_group_dict):
     industry_group_list = []
     for k,v in sorted(industry_group_dict.items(),key=lambda x: x[0]):
@@ -647,7 +831,7 @@ def preprocess_industry_groups(industry_group_dict):
 
 def get_industry_groups(industry_group_list):
     industry_groups_set_list = []
-    for grp, it_lstup in groupby(sorted(industry_group_list, key=lambda x: x[1]), lambda x: x[1]):
+    for grp, it_lstup in itertools.groupby(sorted(industry_group_list, key=lambda x: x[1]), lambda x: x[1]):
         industry_groups_set_list.append(set(map(lambda x: x[0], list(it_lstup))))
     return industry_groups_set_list
 
@@ -848,21 +1032,3 @@ def minvar_hedge(expected_rtn_list,cov_matrix):
 
     return list(sol['x'])
 
-def cal_irr_mean_var(mean_list,sd_list,corr_matrix,cov_matrix):
-    N = len(mean_list)-1
-    G = 1.0+np.irr(mean_list)
-    D = sum([mean_list[i] * (N-i) * math.pow(G,N-i-1) for i in range(N+1)])
-    G_prime_list = [-math.pow(G,N-i)/D for i in range(N+1)]
-    partial_D_partial_G = sum([mean_list[i] * (N-i) * (N-i-1) * math.pow(G,N-i-2) for i in range(N+1)])
-    partial_D_partial_x_list = [math.pow(G,N-i-1) * (N-i) + partial_D_partial_G * G_prime_list[i] for i in range(N+1)]
-    sec_derivative_G = [[-(N-k)*math.pow(G,N-k-1)/D*G_prime_list[j] + math.pow(G,N-k)/D/D*partial_D_partial_x_list[j] for j in range(N+1)] for k in range(N+1)]
-    if corr_matrix is not None:
-        EG = G + sum([sec_derivative_G[j][k] * corr_matrix[j][k]*sd_list[j]*sd_list[k] for j in range(N+1) for k in range(N+1)])/2.0
-        VG = sum([G_prime_list[j] * G_prime_list[k] * corr_matrix[j][k]*sd_list[j]*sd_list[k] for j in range(N+1) for k in range(N+1)])
-    elif cov_matrix is not None:
-        EG = G + sum([sec_derivative_G[j][k] * cov_matrix[j][k] for j in range(N+1) for k in range(N+1)])/2.0
-        VG = sum([G_prime_list[j] * G_prime_list[k] * cov_matrix[j][k] for j in range(N+1) for k in range(N+1)])
-    EIRR = EG - 1.0
-    VIRR = VG
-    SIRR = math.sqrt(VIRR)
-    return EIRR,SIRR
