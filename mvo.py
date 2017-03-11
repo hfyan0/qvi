@@ -686,11 +686,13 @@ def adj_irr_by_cf_time(irr_with_1st_cf_in_1yr, time_b4_1st_cf):
     def f(irr_with_1st_cf_in_lessthan1yr, irr_with_1st_cf_in_1yr, time_b4_1st_cf):
         return math.pow(1.0+irr_with_1st_cf_in_lessthan1yr,1.0-time_b4_1st_cf)/irr_with_1st_cf_in_lessthan1yr-(1.0/irr_with_1st_cf_in_1yr)
     if irr_with_1st_cf_in_1yr > 0:
-        return list(set(find_all_roots_brentq(f, 0.001, 1, pars=(irr_with_1st_cf_in_1yr, time_b4_1st_cf))))[0]
+        sol_set = set(find_all_roots_brentq(f, 0.001, 1, pars=(irr_with_1st_cf_in_1yr, time_b4_1st_cf)))
+        return None if len(sol_set) == 0 else list(sol_set)[0]
     else:
-        return list(set(find_all_roots_brentq(f, -1, -0.001, pars=(irr_with_1st_cf_in_1yr, time_b4_1st_cf))))[0]
+        sol_set = set(find_all_roots_brentq(f, -1, -0.001, pars=(irr_with_1st_cf_in_1yr, time_b4_1st_cf)))
+        return None if len(sol_set) == 0 else list(sol_set)[0]
 
-def cal_irr_mean_ci_MonteCarlo(cur_px,next_eps,sigma,bps,num_terms,num_times_montecarlo,confidence_interval):
+def cal_irr_mean_ci_MonteCarlo(cur_px,next_eps,sigma,bps,num_terms,num_times_montecarlo,confidence_level):
     irr_result_list = []
     for _ in itertools.repeat(None, num_times_montecarlo):
         rand_eps_chg_list = np.random.normal(0, sigma, num_terms).tolist()
@@ -714,19 +716,19 @@ def cal_irr_mean_ci_MonteCarlo(cur_px,next_eps,sigma,bps,num_terms,num_times_mon
     sorted_irr_list = sorted(irr_result_list)
     if len(sorted_irr_list) < 30:
         return None,None,None
-    ci_leftside_pctg = (100.0-confidence_interval)/2.0/100.0
+    ci_leftside_pctg = (100.0-confidence_level)/2.0/100.0
     ci_rightside_pctg = 1.0 - ci_leftside_pctg
 
     irr_mean = round(sum(sorted_irr_list)/len(sorted_irr_list),5)
     # irr_median = sorted_irr_list[len(sorted_irr_list)/2]
-    irr_5pctl = sorted_irr_list[int(len(sorted_irr_list)*ci_leftside_pctg)]
-    irr_95pctl = sorted_irr_list[int(len(sorted_irr_list)*ci_rightside_pctg)]
+    irr_lower_pctl = sorted_irr_list[int(len(sorted_irr_list)*ci_leftside_pctg)]
+    irr_upper_pctl = sorted_irr_list[int(len(sorted_irr_list)*ci_rightside_pctg)]
     irr_true_mean = next_eps/cur_px
-    irr_true_5pctl = irr_true_mean - (irr_mean - irr_5pctl)
-    irr_true_95pctl = irr_true_mean - (irr_mean - irr_95pctl)
-    return [irr_true_mean,irr_true_5pctl,irr_true_95pctl]
+    irr_true_lower_pctl = irr_true_mean - (irr_mean - irr_lower_pctl)
+    irr_true_upper_pctl = irr_true_mean - (irr_mean - irr_upper_pctl)
+    return [irr_true_mean,irr_true_lower_pctl,irr_true_upper_pctl]
 
-def calc_irr_mean_ci(config,dt,symbol,ann_sd_sym_rtn,hist_unadj_px_dict,hist_eps_dict,hist_bps_dict,delay_months,debug_mode):
+def calc_irr_mean_ci(config,dt,symbol,ann_sd_sym_rtn,hist_unadj_px_dict,hist_eps_dict,hist_bps_dict,confidence_level,delay_months,debug_mode):
     irr_mean_ci_tuple = [None,None,None]
 
     curcy_converter = CurrencyConverter(config["currency_rate"])
@@ -774,15 +776,9 @@ def calc_irr_mean_ci(config,dt,symbol,ann_sd_sym_rtn,hist_unadj_px_dict,hist_eps
     ###################################################
 
     ###################################################
-    if len(eps_list) > 0:
-        one_yr_dt_bound = eps_list[-1][0] - timedelta(weeks = float(52.0/12.0*13.0))
-        cur_yr_eps = sum(map(lambda x: x[1], filter(lambda x: x[0] >= one_yr_dt_bound, eps_list)))
-    else:
-        cur_yr_eps = 0.0
-
     if len(eps_list) >= 5:
-        eps_list = map(lambda x: x[1], eps_list)
-        eps_chg_list = map(lambda x: x[1]-x[0], zip(eps_list[:-1],eps_list[1:]))
+        eps_val_list = map(lambda x: x[1], eps_list)
+        eps_chg_list = map(lambda x: x[1]-x[0], zip(eps_val_list[:-1],eps_val_list[1:]))
         eps_chg_list = sorted(eps_chg_list)[1:][:-1]
 
         m = sum(eps_chg_list)/len(eps_chg_list)
@@ -791,7 +787,7 @@ def calc_irr_mean_ci(config,dt,symbol,ann_sd_sym_rtn,hist_unadj_px_dict,hist_eps
         ann_sd = math.sqrt(annualization_factor) * sd
 
         if debug_mode:
-            print "eps_list: %s" % eps_list
+            print "eps_val_list: %s" % eps_val_list
             print "annualization_factor: %s" % annualization_factor
             print "m: %s" % m
             print "sd: %s" % sd
@@ -799,7 +795,14 @@ def calc_irr_mean_ci(config,dt,symbol,ann_sd_sym_rtn,hist_unadj_px_dict,hist_eps
     else:
         ann_sd = 0.0
 
-    next_eps = cur_yr_eps
+    if len(eps_list) > 0:
+        five_yr_dt_bound = eps_list[-1][0] - timedelta(weeks = int(52*5))
+        fil_eps_list = map(lambda x: x[1], filter(lambda x: x[0] >= five_yr_dt_bound, eps_list))
+        annualized_avg_eps = sum(fil_eps_list) / len(fil_eps_list) * annualization_factor
+    else:
+        annualized_avg_eps = 0.0
+
+    next_eps = annualized_avg_eps
 
     if debug_mode:
         print "next_eps: %s" % next_eps
@@ -813,7 +816,7 @@ def calc_irr_mean_ci(config,dt,symbol,ann_sd_sym_rtn,hist_unadj_px_dict,hist_eps
                                                    # 100,
                                                    10,
                                                    1000,
-                                                   95)
+                                                   confidence_level)
     if irr_mean_ci_tuple is not None:
         irr_mean_ci_tuple = map(lambda x: adj_irr_by_cf_time(x, time_to_next_cf), irr_mean_ci_tuple)
 
