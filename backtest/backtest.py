@@ -9,7 +9,7 @@ from itertools import groupby
 
 import os
 sys.path.append(os.path.dirname(sys.path[0]))
-from mvo import calc_cov_matrix_annualized,intWithCommas,justify_str,markowitz,markowitz_robust,markowitz_sharpe,log_optimal_growth,\
+from qvi import calc_cov_matrix_annualized,intWithCommas,justify_str,markowitz,markowitz_robust,markowitz_sharpe,log_optimal_growth,\
                 read_file,extract_sd_from_cov_matrix,calc_return_list,get_hist_data_key_date,get_hist_data_key_sym,calc_expected_return_before_201703,\
                 get_industry_groups,preprocess_industry_groups,get_port_and_hdg_cov_matrix,log_optimal_hedge,sharpe_hedge,minvar_hedge
 

@@ -4,7 +4,7 @@ import os
 import math
 import datetime
 sys.path.append(os.path.dirname(sys.path[0]))
-from mvo import get_hist_data_key_date,get_hist_data_key_sym
+from qvi import get_hist_data_key_date,get_hist_data_key_sym
 
 data_path="/home/qy/Dropbox/nirvana/mvo/data/"
 

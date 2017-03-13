@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from mvo import cal_irr_mean_var_Reinschmidt,cal_irr_mean_ci_MonteCarlo,adj_irr_by_cf_time
+from qvi import cal_irr_mean_var_Reinschmidt,cal_irr_mean_ci_MonteCarlo,adj_irr_by_cf_time
 
 # corr_matrix = [
 # [1, 0, 0, 0, 0, 0],

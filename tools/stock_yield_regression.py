@@ -6,7 +6,7 @@ import os
 import math
 import datetime
 sys.path.append(os.path.dirname(sys.path[0]))
-from mvo import get_hist_data_key_date,get_hist_data_key_sym
+from qvi import get_hist_data_key_date,get_hist_data_key_sym
 
 def reg_m(y, x):
     ones = np.ones(len(x[0]))

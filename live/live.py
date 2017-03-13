@@ -7,7 +7,7 @@ import numpy as np
 
 import os
 sys.path.append(os.path.dirname(sys.path[0]))
-from mvo import CurrencyConverter,calc_cov_matrix_annualized,intWithCommas,justify_str,\
+from qvi import CurrencyConverter,calc_cov_matrix_annualized,intWithCommas,justify_str,\
                 markowitz_sharpe,log_optimal_growth,read_file,calc_expected_return_before_201703,\
                 get_hist_data_key_sym,get_industry_groups,preprocess_industry_groups
 
