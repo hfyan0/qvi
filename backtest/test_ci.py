@@ -15,7 +15,7 @@ from itertools import groupby
 import os
 sys.path.append(os.path.dirname(sys.path[0]))
 from qvi import calc_cov_matrix_annualized,intWithCommas,justify_str,markowitz,markowitz_robust,markowitz_sharpe,log_optimal_growth,\
-                read_file,extract_sd_from_cov_matrix,calc_return_list,get_hist_data_key_date,get_hist_data_key_sym,calc_irr_mean_ci,\
+                read_file,extract_sd_from_cov_matrix,calc_return_list,get_hist_data_key_date,get_hist_data_key_sym,calc_irr_mean_ci_before_20170309,calc_irr_mean_cov_after_20170309,\
                 get_industry_groups,preprocess_industry_groups,get_port_and_hdg_cov_matrix,log_optimal_hedge,sharpe_hedge,minvar_hedge
 
 ###################################################
@@ -30,26 +30,14 @@ traded_symbol_list = sorted(config["general"]["traded_symbols"])
 rebalance_interval = int(config["general"]["rebalance_interval"])
 
 ###################################################
-# hist_intexp_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_intexp"])
-# hist_cogs_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_cogs"])
-# hist_revenue_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_revenue"])
-# hist_mktcap_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_mktcap"])
-# hist_oper_roe_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_oper_roe"])
-# hist_totequity_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_totequity"])
-# hist_operatingexp_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_operatingexp"])
 hist_adj_px_dict = get_hist_data_key_date(config_common["hist_data"]["hist_adj_px"])
 hist_adj_px_list_sorted = sorted(list(set(map(lambda x: (datetime.strptime(x[0],"%Y-%m-%d").date(),x[1],float(x[2])), read_file(config_common["hist_data"]["hist_adj_px"])))),key=lambda y: y[0])
 hist_unadj_px_dict = get_hist_data_key_date(config_common["hist_data"]["hist_unadj_px"])
 
 hist_bps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_bps"])
-# hist_totasset_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_totasset"])
-# hist_oper_eps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_oper_eps"])
 hist_eps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_eps"])
-# hist_roa_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_roa"])
-# hist_stattaxrate_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_stattaxrate"])
-# hist_operincm_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_operincm"])
-# hist_costofdebt_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_costofdebt"])
-# hist_totliabps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_totliabps"])
+hist_roa_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_roa"])
+hist_totliabps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_totliabps"])
 
 ###################################################
 industry_groups_list = get_industry_groups(preprocess_industry_groups(config_common["industry_group"]))
@@ -74,17 +62,18 @@ for dt in rebalance_date_list:
     sym_time_series_list = map(lambda s: map(lambda ts: (ts[0],ts[2]), filter(lambda x: x[1] == s, hist_adj_px_list_fil_sorted)), symbol_list)
     cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(sym_time_series_list, specific_riskiness_list)
 
-    irr_mean_ci_tuple_list = map(lambda s: calc_irr_mean_ci(config_common,dt,s[1],math.sqrt(cov_matrix[s[0]][s[0]]),hist_unadj_px_dict,hist_eps_dict,hist_bps_dict,int(config["general"]["confidence_level"]),AUDIT_DELAY,False), enumerate(symbol_list))
+    # irr_mean_ci_tuple_list = map(lambda s: calc_irr_mean_ci_before_20170309(config_common,dt,s[1],math.sqrt(cov_matrix[s[0]][s[0]]),hist_unadj_px_dict,hist_eps_dict,hist_bps_dict,int(config["general"]["confidence_level"]),AUDIT_DELAY,False), enumerate(symbol_list))
+    calc_irr_mean_cov_after_20170309(config_common,dt,symbol_list,hist_bps_dict,hist_unadj_px_dict,hist_totliabps_dict,hist_eps_dict,hist_roa_dict,AUDIT_DELAY,True)
 
-    prep_tot_rtn_list = map(lambda s: map(lambda v: v[2], filter(lambda x: x[0]>=dt, filter(lambda x: x[1]==s, hist_adj_px_list_sorted))), symbol_list)
-
-    ###################################################
-    num_of_days_actual_rtn = int(config["general"]["num_of_days_actual_rtn"])
-    annualized_tot_rtn_list = map(lambda x: round(math.pow(x[num_of_days_actual_rtn]/x[0],252.0/float(num_of_days_actual_rtn))-1.0,5) if len(x) > num_of_days_actual_rtn else None, prep_tot_rtn_list)
-    ###################################################
-
-    hit_or_miss_list.append(map(lambda x: ( 1.0 if ((x[1]>x[0][1] and x[1]<x[0][2])) else -1.0 ) if all(map(lambda y: y is not None, x[0]+[x[1]])) else 0.0, zip(irr_mean_ci_tuple_list,annualized_tot_rtn_list)))
-    cum_hit_count = float(len(filter(lambda x: x > 0.001, map(lambda x: x[0], hit_or_miss_list))))
-    hit_or_miss_total_count = len(filter(lambda x: abs(x) > 0.001, map(lambda x: x[0], hit_or_miss_list)))
-    hit_prob_list = [round(cum_hit_count/hit_or_miss_total_count,5) if hit_or_miss_total_count > 0 else None]
-    print str(dt)+" "+'='.join(map(str, zip(symbol_list,irr_mean_ci_tuple_list,hit_prob_list,annualized_tot_rtn_list)))
+    # prep_tot_rtn_list = map(lambda s: map(lambda v: v[2], filter(lambda x: x[0]>=dt, filter(lambda x: x[1]==s, hist_adj_px_list_sorted))), symbol_list)
+    #
+    # ###################################################
+    # num_of_days_actual_rtn = int(config["general"]["num_of_days_actual_rtn"])
+    # annualized_tot_rtn_list = map(lambda x: round(math.pow(x[num_of_days_actual_rtn]/x[0],252.0/float(num_of_days_actual_rtn))-1.0,5) if len(x) > num_of_days_actual_rtn else None, prep_tot_rtn_list)
+    # ###################################################
+    #
+    # hit_or_miss_list.append(map(lambda x: ( 1.0 if ((x[1]>x[0][1] and x[1]<x[0][2])) else -1.0 ) if all(map(lambda y: y is not None, x[0]+[x[1]])) else 0.0, zip(irr_mean_ci_tuple_list,annualized_tot_rtn_list)))
+    # cum_hit_count = float(len(filter(lambda x: x > 0.001, map(lambda x: x[0], hit_or_miss_list))))
+    # hit_or_miss_total_count = len(filter(lambda x: abs(x) > 0.001, map(lambda x: x[0], hit_or_miss_list)))
+    # hit_prob_list = [round(cum_hit_count/hit_or_miss_total_count,5) if hit_or_miss_total_count > 0 else None]
+    # print str(dt)+" "+'='.join(map(str, zip(symbol_list,irr_mean_ci_tuple_list,hit_prob_list,annualized_tot_rtn_list)))
