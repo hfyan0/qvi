@@ -694,33 +694,29 @@ def adj_irr_by_cf_time(irr_with_1st_cf_in_1yr, time_b4_1st_cf):
         return None if len(sol_set) == 0 else list(sol_set)[0]
 
 def get_divd_rlzn_external_driver(cur_eps,rand_eps_chg_list,bps):
-    cum_rand_eps_chg_list = np.cumsum(rand_eps_chg_list).tolist()
     # print "cur_eps: %s" % cur_eps
     # print "bps: %s" % bps 
     # print "rand_eps_chg_list: %s" % rand_eps_chg_list
-    # print "cum_rand_eps_chg_list: %s" % cum_rand_eps_chg_list
-    eps_rlzn_path_list = map(lambda x: cur_eps + x, cum_rand_eps_chg_list)
+    eps_rlzn_path_list = (np.array([cur_eps]*len(rand_eps_chg_list)) + np.cumsum(rand_eps_chg_list)).tolist()
     # print "eps_rlzn_path_list: %s" % eps_rlzn_path_list
 
     dvd_rlzn_path_list = []
     for i in range(len(eps_rlzn_path_list)):
         if eps_rlzn_path_list[i] > 0.0:
-            dvd = max(sum(eps_rlzn_path_list[:(i+1)]) - sum(dvd_rlzn_path_list), 0.0)
+            dvd = max(np.sum(np.array(eps_rlzn_path_list[:(i+1)])) - np.sum(np.array(dvd_rlzn_path_list)), 0.0)
             dvd_rlzn_path_list.append(dvd)
         else:
             dvd_rlzn_path_list.append(0.0)
-            if (sum(eps_rlzn_path_list) - sum(dvd_rlzn_path_list) < -bps):
-                break
+            # if (sum(eps_rlzn_path_list) - sum(dvd_rlzn_path_list) < -bps):
+            #     break
     return dvd_rlzn_path_list
 
 def get_divd_rlzn_asset_driver(cur_roa,rand_roa_chg_list,bps,liabps):
-    cum_rand_roa_chg_list = np.cumsum(rand_roa_chg_list).tolist()
     # print "cur_roa: %s" % cur_roa
     # print "bps: %s" % bps 
     # print "liabps: %s" % liabps
     # print "rand_roa_chg_list: %s" % rand_roa_chg_list
-    # print "cum_rand_roa_chg_list: %s" % cum_rand_roa_chg_list
-    roa_rlzn_path_list = map(lambda x: cur_roa + x, cum_rand_roa_chg_list)
+    roa_rlzn_path_list = (np.array([cur_roa]*len(rand_roa_chg_list)) + np.cumsum(rand_roa_chg_list)).tolist()
     # print "roa_rlzn_path_list: %s" % roa_rlzn_path_list
 
     init_aps = bps+liabps
@@ -733,14 +729,16 @@ def get_divd_rlzn_asset_driver(cur_roa,rand_roa_chg_list,bps,liabps):
         else:
             prev_aps = aps_rlzn_path_list[-1]
 
+        prev_aps = max(prev_aps,0)
+
         eps_rlzn_path_list.append(prev_aps * roa_rlzn_path_list[i])
 
         if eps_rlzn_path_list[i] > 0.0:
-            dvd_rlzn_path_list.append( max(sum(eps_rlzn_path_list[:(i+1)]) - sum(dvd_rlzn_path_list), 0.0) )
+            dvd_rlzn_path_list.append( max(np.sum(np.array(eps_rlzn_path_list[:(i+1)])) - np.sum(np.array(dvd_rlzn_path_list)), 0.0) )
         else:
             dvd_rlzn_path_list.append(0.0)
-            if (sum(eps_rlzn_path_list) - sum(dvd_rlzn_path_list) < -bps):
-                break
+            # if (sum(eps_rlzn_path_list) - sum(dvd_rlzn_path_list) < -bps):
+            #     break
 
         aps_rlzn_path_list.append(prev_aps + eps_rlzn_path_list[-1] - dvd_rlzn_path_list[-1])
 
@@ -870,7 +868,7 @@ def calc_irr_mean_cov_after_20170309(config,dt,symbol_list,hist_bps_dict,hist_un
     def replace_date_with_YM(date_value_list):
         return map(lambda x: ((x[0].year,x[0].month),x[1]), date_value_list)
 
-    def interpolate_values(sym_YM_val_list,annualization_factor_list):
+    def interpolate_values(sym_YM_val_list,annualization_factor_list,just_repeat_val=False):
         interpolated_YM_val_list = []
         for YM_val_list,annualization_factor in zip(sym_YM_val_list,annualization_factor_list):
             YM_hold_list = []
@@ -878,13 +876,13 @@ def calc_irr_mean_cov_after_20170309(config,dt,symbol_list,hist_bps_dict,hist_un
             for YM,val in YM_val_list:
                 if val is not None:
                     if len(sym_interpolated_YM_val_list) == 0:
-                        interpolated_val = val/(4.0/annualization_factor)
+                        interpolated_val = val/(4.0/annualization_factor) if just_repeat_val == False else val
                         if annualization_factor == 2:
                             sym_interpolated_YM_val_list.extend(map(lambda ym: (ym,interpolated_val), YM_hold_list[-1:]))
                         elif annualization_factor == 1:
                             sym_interpolated_YM_val_list.extend(map(lambda ym: (ym,interpolated_val), YM_hold_list[-3:]))
                     else:
-                        interpolated_val = val/float(len(YM_hold_list)+1.0)
+                        interpolated_val = val/float(len(YM_hold_list)+1.0) if just_repeat_val == False else val
                         sym_interpolated_YM_val_list.extend(map(lambda ym: (ym, interpolated_val), YM_hold_list))
                     sym_interpolated_YM_val_list.append((YM, interpolated_val))
                     YM_hold_list = []
@@ -893,13 +891,14 @@ def calc_irr_mean_cov_after_20170309(config,dt,symbol_list,hist_bps_dict,hist_un
             interpolated_YM_val_list.append(sym_interpolated_YM_val_list)
         return interpolated_YM_val_list
 
-    def standardize_yearly_val(sym_YM_val_list,yr_end_month):
+    def standardize_yearly_val(sym_YM_val_list,yr_end_month,just_repeat_val=False):
         yearly_val = []
         prev_val_list = []
         for YM,val in sym_YM_val_list:
             prev_val_list.append(val)
             if YM[1] == yr_end_month:
-                yearly_val.append((YM[0],sum(prev_val_list)*4.0/len(prev_val_list)))
+                val = sum(prev_val_list)*4.0/len(prev_val_list) if just_repeat_val == False else prev_val_list[-1]
+                yearly_val.append((YM[0],val))
                 prev_val_list = []
         # ###################################################
         # # remaining items
@@ -918,11 +917,9 @@ def calc_irr_mean_cov_after_20170309(config,dt,symbol_list,hist_bps_dict,hist_un
     ###################################################
     w_a_dict = {}
     w_e_dict = {}
-    bv_rlzn_dict = {}
-    bv_rcvy_dict = {}
+    bv_rlzn_yr_dict = {}
+    bv_rcvy_rate_dict = {}
 
-    reporting_curcy_conv_rate_dict = dict(map(lambda s: (s, curcy_converter.get_conv_rate_to_hkd(config["reporting_currency"].get(s,config["reporting_currency"]["default"]),dt)), symbol_list))
-    price_curcy_conv_rate_dict = dict(map(lambda s: (s, curcy_converter.get_conv_rate_to_hkd(config["price_currency"].get(s,config["price_currency"]["default"]),dt)), symbol_list))
     annualization_factor_dict = {}
 
     ###################################################
@@ -946,16 +943,15 @@ def calc_irr_mean_cov_after_20170309(config,dt,symbol_list,hist_bps_dict,hist_un
         for w,ig in w_ig_list:
             w_a_w_e_bv_list.append(tuple(map(lambda x: w*x, map(float, config["expected_rtn_ast_ext_bvrlzn_bvrcvy"].get(ig, config["expected_rtn_ast_ext_bvrlzn_bvrcvy"]["0"])))))
 
-        w_a_dict[sym]     = sum(map(lambda x: x[0], w_a_w_e_bv_list))
-        w_e_dict[sym]     = sum(map(lambda x: x[1], w_a_w_e_bv_list))
-        bv_rlzn_dict[sym] = sum(map(lambda x: x[2], w_a_w_e_bv_list))
-        bv_rcvy_dict[sym] = sum(map(lambda x: x[3], w_a_w_e_bv_list))
+        w_a_dict[sym]           = sum(map(lambda x: x[0], w_a_w_e_bv_list))
+        w_e_dict[sym]           = sum(map(lambda x: x[1], w_a_w_e_bv_list))
+        bv_rlzn_yr_dict[sym]    = sum(map(lambda x: x[2], w_a_w_e_bv_list))
+        bv_rcvy_rate_dict[sym]  = sum(map(lambda x: x[3], w_a_w_e_bv_list))
         if debug_mode:
-            print "sym: %s %s %s" % (sym, w_a_dict[sym], w_e_dict[sym])
+            print "sym config: %s" % ' '.join(map(str, [sym, w_a_dict[sym], w_e_dict[sym], bv_rlzn_yr_dict[sym], bv_rcvy_rate_dict[sym]]))
 
     ###################################################
 
-    # reporting_YM_list = sorted(set([ym for ym_list in map(lambda s: map(lambda x: x[0], filter(lambda x: len(x) > 0, filter(lambda x: x[0] >= shift_back_n_months(dt,12*5+1+delay_months), filter(lambda x: x[0] <= shift_back_n_months(dt,delay_months), hist_bps_dict.get(s,[]))))), symbol_list) for ym in ym_list]))
     reporting_YM_list = [j for i in map(lambda y: map(lambda m: (1980+y,m), [3,6,9,12]), range(50)) for j in i]
     last_fundl_avb_date = shift_back_n_months(dt,delay_months)
     last_fundl_avb_YM = (last_fundl_avb_date.year,last_fundl_avb_date.month)
@@ -963,55 +959,77 @@ def calc_irr_mean_cov_after_20170309(config,dt,symbol_list,hist_bps_dict,hist_un
 
     sym_aligned_roa_list = map(lambda sym: map(lambda ym: next(iter(filter(lambda x: x[0] == ym, replace_date_with_YM(hist_roa_dict.get(sym,[])))),(ym,None)), reporting_YM_list), symbol_list)
     sym_aligned_eps_list = map(lambda sym: map(lambda ym: next(iter(filter(lambda x: x[0] == ym, replace_date_with_YM(hist_eps_dict.get(sym,[])))),(ym,None)), reporting_YM_list), symbol_list)
+    sym_aligned_bps_list = map(lambda sym: map(lambda ym: next(iter(filter(lambda x: x[0] == ym, replace_date_with_YM(hist_bps_dict.get(sym,[])))),(ym,None)), reporting_YM_list), symbol_list)
+    sym_aligned_totliabps_list = map(lambda sym: map(lambda ym: next(iter(filter(lambda x: x[0] == ym, replace_date_with_YM(hist_totliabps_dict.get(sym,[])))),(ym,None)), reporting_YM_list), symbol_list)
     # if debug_mode:
     #     print "sym_aligned_eps_list: %s" % (": ".join(map(str, zip(symbol_list,sym_aligned_eps_list))))
 
-    interpolated_YM_roa_list = interpolate_values(sym_aligned_roa_list,map(lambda s: annualization_factor_dict[s],symbol_list))
+    ###################################################
+    # ROA from Bloomberg has to be divided by 100
+    ###################################################
+    sym_aligned_roa_list = map(lambda x: map(lambda y: (y[0],y[1]/100.0 if y[1] is not None else None), x), sym_aligned_roa_list)
+    interpolated_YM_roa_list = interpolate_values(sym_aligned_roa_list,map(lambda s: annualization_factor_dict[s],symbol_list),True)
+    interpolated_YM_bps_list = interpolate_values(sym_aligned_bps_list,map(lambda s: annualization_factor_dict[s],symbol_list),True)
+    interpolated_YM_totliabps_list = interpolate_values(sym_aligned_totliabps_list,map(lambda s: annualization_factor_dict[s],symbol_list),True)
     interpolated_YM_eps_list = interpolate_values(sym_aligned_eps_list,map(lambda s: annualization_factor_dict[s],symbol_list))
     if debug_mode:
         print "interpolated_YM_eps_list: %s" % (": ".join(map(str, zip(symbol_list,interpolated_YM_eps_list)[0])))
+        print "interpolated_YM_bps_list: %s" % (": ".join(map(str, zip(symbol_list,interpolated_YM_bps_list)[0])))
+        print "interpolated_YM_totliabps_list: %s" % (": ".join(map(str, zip(symbol_list,interpolated_YM_totliabps_list)[0])))
         print "interpolated_YM_roa_list: %s" % (": ".join(map(str, zip(symbol_list,interpolated_YM_roa_list)[0])))
 
     ###################################################
-    # shifting back 6 months to make sure we have data for that quarter during live mode,
+    # to make sure we have data for that quarter during live mode / not to exclude those companies that announce results late
+    # - final year = dt.date().year - 1
+    # - shifting back 9 months
     ###################################################
-    potential_stndz_mth_list = filter(lambda x: x is not None, map(lambda x: x if x <= shift_back_n_months(dt,6).month else None, [3,6,9,12]))
-    stndzd_mth = 12
-    if len(potential_stndz_mth_list) > 0:
-        stndzd_mth = max(potential_stndz_mth_list)
+    quarter_end_list = [(y,q) for y in map(lambda x: dt.year-x, range(2)) for q in [3,6,9,12]]
+    dt_back_9_mth = shift_back_n_months(dt,9)
+    dt_back_9_mth_ym = (dt_back_9_mth.year, dt_back_9_mth.month)
+    final_year,stndzd_mth = max(filter(lambda x: x is not None, map(lambda x: x if x <= dt_back_9_mth_ym else None, quarter_end_list)))
 
     if debug_mode:
-        print "dt: %s standardized month: %s" % (dt,stndzd_mth)
+        print "dt: %s final_year: %s standardized month: %s" % (dt,final_year,stndzd_mth)
 
-    YM_eps_stndzd_yr_end_list = map(lambda eps_list: standardize_yearly_val(eps_list,stndzd_mth), interpolated_YM_eps_list)
-    YM_roa_stndzd_yr_end_list = map(lambda roa_list: standardize_yearly_val(roa_list,stndzd_mth), interpolated_YM_roa_list)
-
-    final_year = max([j[0] for i in YM_eps_stndzd_yr_end_list for j in i])
-    if debug_mode:
-        print "final_year: %s" % (final_year)
+    YM_eps_stndzd_yr_end_list       = map(lambda eps_list:       standardize_yearly_val(eps_list,      stndzd_mth     ), interpolated_YM_eps_list)
+    YM_roa_stndzd_yr_end_list       = map(lambda roa_list:       standardize_yearly_val(roa_list,      stndzd_mth,True), interpolated_YM_roa_list)
+    YM_bps_stndzd_yr_end_list       = map(lambda bps_list:       standardize_yearly_val(bps_list,      stndzd_mth,True), interpolated_YM_bps_list)
+    YM_totliabps_stndzd_yr_end_list = map(lambda totliabps_list: standardize_yearly_val(totliabps_list,stndzd_mth,True), interpolated_YM_totliabps_list)
 
     NUM_OF_YEARS = 6 # so 5 years of changes
     YM_eps_stndzd_yr_end_list = map(lambda sym_stndzd_list: map(lambda x: x[1], filter(lambda x: x[0]>(final_year-NUM_OF_YEARS), sym_stndzd_list)), YM_eps_stndzd_yr_end_list)
+    YM_bps_stndzd_yr_end_list = map(lambda sym_stndzd_list: map(lambda x: x[1], filter(lambda x: x[0]>(final_year-NUM_OF_YEARS), sym_stndzd_list)), YM_bps_stndzd_yr_end_list)
+    YM_totliabps_stndzd_yr_end_list = map(lambda sym_stndzd_list: map(lambda x: x[1], filter(lambda x: x[0]>(final_year-NUM_OF_YEARS), sym_stndzd_list)), YM_totliabps_stndzd_yr_end_list)
     YM_roa_stndzd_yr_end_list = map(lambda sym_stndzd_list: map(lambda x: x[1], filter(lambda x: x[0]>(final_year-NUM_OF_YEARS), sym_stndzd_list)), YM_roa_stndzd_yr_end_list)
-    symbol_with_enough_eps_data_set = set(filter(lambda x: x is not None, map(lambda x: x[0] if len(x[1]) == NUM_OF_YEARS else None, zip(symbol_list,YM_eps_stndzd_yr_end_list))))
-    symbol_with_enough_roa_data_set = set(filter(lambda x: x is not None, map(lambda x: x[0] if len(x[1]) == NUM_OF_YEARS else None, zip(symbol_list,YM_roa_stndzd_yr_end_list))))
+    symbol_with_enough_eps_data_set       = set(filter(lambda x: x is not None, map(lambda x: x[0] if len(x[1]) == NUM_OF_YEARS else None, zip(symbol_list,YM_eps_stndzd_yr_end_list))))
+    symbol_with_enough_roa_data_set       = set(filter(lambda x: x is not None, map(lambda x: x[0] if len(x[1]) == NUM_OF_YEARS else None, zip(symbol_list,YM_roa_stndzd_yr_end_list))))
+    symbol_with_enough_bps_data_set       = set(filter(lambda x: x is not None, map(lambda x: x[0] if len(x[1]) == NUM_OF_YEARS else None, zip(symbol_list,YM_bps_stndzd_yr_end_list))))
+    symbol_with_enough_totliabps_data_set = set(filter(lambda x: x is not None, map(lambda x: x[0] if len(x[1]) == NUM_OF_YEARS else None, zip(symbol_list,YM_totliabps_stndzd_yr_end_list))))
     symbol_with_unadj_px_set = set(filter(lambda x: x is not None, map(lambda s: s if s in hist_unadj_px_dict[dt] else None, symbol_list)))
-    symbol_with_enough_data_set = symbol_with_enough_eps_data_set.intersection(symbol_with_enough_roa_data_set).intersection(symbol_with_unadj_px_set)
+    symbol_with_enough_data_set = symbol_with_enough_eps_data_set.intersection(symbol_with_enough_bps_data_set).intersection(symbol_with_enough_totliabps_data_set).intersection(symbol_with_enough_roa_data_set).intersection(symbol_with_unadj_px_set)
     symbol_with_enough_data_list = filter(lambda s: s in symbol_with_enough_data_set, symbol_list)
 
     if debug_mode:
         print "symbol_with_enough_data_list: %s %s" % (dt,symbol_with_enough_data_list)
 
     interpolated_YM_eps_list  = map(lambda x: x[1], filter(lambda x: x[0] in symbol_with_enough_data_set, zip(symbol_list,interpolated_YM_eps_list)))
+    interpolated_YM_bps_list  = map(lambda x: x[1], filter(lambda x: x[0] in symbol_with_enough_data_set, zip(symbol_list,interpolated_YM_bps_list)))
+    interpolated_YM_totliabps_list  = map(lambda x: x[1], filter(lambda x: x[0] in symbol_with_enough_data_set, zip(symbol_list,interpolated_YM_totliabps_list)))
     interpolated_YM_roa_list  = map(lambda x: x[1], filter(lambda x: x[0] in symbol_with_enough_data_set, zip(symbol_list,interpolated_YM_roa_list)))
     YM_eps_stndzd_yr_end_list = map(lambda x: x[1], filter(lambda x: x[0] in symbol_with_enough_data_set, zip(symbol_list,YM_eps_stndzd_yr_end_list)))
+    YM_bps_stndzd_yr_end_list = map(lambda x: x[1], filter(lambda x: x[0] in symbol_with_enough_data_set, zip(symbol_list,YM_bps_stndzd_yr_end_list)))
+    YM_totliabps_stndzd_yr_end_list = map(lambda x: x[1], filter(lambda x: x[0] in symbol_with_enough_data_set, zip(symbol_list,YM_totliabps_stndzd_yr_end_list)))
     YM_roa_stndzd_yr_end_list = map(lambda x: x[1], filter(lambda x: x[0] in symbol_with_enough_data_set, zip(symbol_list,YM_roa_stndzd_yr_end_list)))
 
     if debug_mode:
-        print "YM_eps_stndzd_yr_end_list: %s" % (YM_eps_stndzd_yr_end_list[:5])
-        print "YM_roa_stndzd_yr_end_list: %s" % (YM_roa_stndzd_yr_end_list[:5])
+        print "YM_eps_stndzd_yr_end_list: %s" % (zip(symbol_with_enough_data_list,YM_eps_stndzd_yr_end_list)[:5])
+        print "YM_bps_stndzd_yr_end_list: %s" % (zip(symbol_with_enough_data_list,YM_bps_stndzd_yr_end_list)[:5])
+        print "YM_totliabps_stndzd_yr_end_list: %s" % (zip(symbol_with_enough_data_list,YM_totliabps_stndzd_yr_end_list)[:5])
+        print "YM_roa_stndzd_yr_end_list: %s" % (zip(symbol_with_enough_data_list,YM_roa_stndzd_yr_end_list)[:5])
 
     YM_eps_chg_stndzd_yr_end_list = map(lambda eps_list: map(lambda y: y[0]-y[1], zip(eps_list[1:],eps_list[:-1])), YM_eps_stndzd_yr_end_list)
+    YM_bps_chg_stndzd_yr_end_list = map(lambda bps_list: map(lambda y: y[0]-y[1], zip(bps_list[1:],bps_list[:-1])), YM_bps_stndzd_yr_end_list)
+    YM_totliabps_chg_stndzd_yr_end_list = map(lambda totliabps_list: map(lambda y: y[0]-y[1], zip(totliabps_list[1:],totliabps_list[:-1])), YM_totliabps_stndzd_yr_end_list)
     YM_roa_chg_stndzd_yr_end_list = map(lambda roa_list: map(lambda y: y[0]-y[1], zip(roa_list[1:],roa_list[:-1])), YM_roa_stndzd_yr_end_list)
 
     eps_roa_chg_cov_matrix = np.cov(np.array(YM_eps_chg_stndzd_yr_end_list+YM_roa_chg_stndzd_yr_end_list))
@@ -1027,46 +1045,128 @@ def calc_irr_mean_cov_after_20170309(config,dt,symbol_list,hist_bps_dict,hist_un
 
     ###################################################
     NUM_OF_QUARTERS_FOR_CUR_EARG = 12
-    cur_eps_list = map(lambda sym_YM_val_list: sum(map(lambda x: (NUM_OF_QUARTERS_FOR_CUR_EARG-x[0])*x[1], enumerate(map(lambda y: y[1], list(reversed(sym_YM_val_list))[:NUM_OF_QUARTERS_FOR_CUR_EARG])))) / (NUM_OF_QUARTERS_FOR_CUR_EARG*(NUM_OF_QUARTERS_FOR_CUR_EARG+1)/2.0) * 4.0, interpolated_YM_eps_list)
-    cur_roa_list = map(lambda sym_YM_val_list: sum(map(lambda x: (NUM_OF_QUARTERS_FOR_CUR_EARG-x[0])*x[1], enumerate(map(lambda y: y[1], list(reversed(sym_YM_val_list))[:NUM_OF_QUARTERS_FOR_CUR_EARG])))) / (NUM_OF_QUARTERS_FOR_CUR_EARG*(NUM_OF_QUARTERS_FOR_CUR_EARG+1)/2.0) * 4.0, interpolated_YM_roa_list)
-    sym_bps_list = map(lambda sym: sorted(filter(lambda x: x[0] <= shift_back_n_months(dt,delay_months), hist_bps_dict.get(sym,[])), key=lambda x: x[0])[-1][1], symbol_with_enough_data_list)
-    sym_totliabps_list = map(lambda sym: sorted(filter(lambda x: x[0] <= shift_back_n_months(dt,delay_months), hist_totliabps_dict.get(sym,[])), key=lambda x: x[0])[-1][1], symbol_with_enough_data_list)
-    sym_hist_unadj_px_list = map(lambda s: hist_unadj_px_dict[dt][s], symbol_with_enough_data_list)
+    reporting_curcy_conv_rate_list = map(lambda s: curcy_converter.get_conv_rate_to_hkd(config["reporting_currency"].get(s,config["reporting_currency"]["default"]),dt), symbol_with_enough_data_list)
+    price_curcy_conv_rate_list = map(lambda s: curcy_converter.get_conv_rate_to_hkd(config["price_currency"].get(s,config["price_currency"]["default"]),dt), symbol_with_enough_data_list)
+    cur_eps_list = map(lambda sym_YM_val_list: sum(map(lambda x: (NUM_OF_QUARTERS_FOR_CUR_EARG-x[0])*x[1], enumerate(map(lambda y: y[1], list(reversed(sym_YM_val_list))[:NUM_OF_QUARTERS_FOR_CUR_EARG])))) / (NUM_OF_QUARTERS_FOR_CUR_EARG*(NUM_OF_QUARTERS_FOR_CUR_EARG+1)/2.0) * 4.0  , interpolated_YM_eps_list)
+    ###################################################
+    # ROA from Bloomberg is already annualized
+    ###################################################
+    cur_roa_list = map(lambda sym_YM_val_list: sum(map(lambda x: (NUM_OF_QUARTERS_FOR_CUR_EARG-x[0])*x[1], enumerate(map(lambda y: y[1], list(reversed(sym_YM_val_list))[:NUM_OF_QUARTERS_FOR_CUR_EARG])))) / (NUM_OF_QUARTERS_FOR_CUR_EARG*(NUM_OF_QUARTERS_FOR_CUR_EARG+1)/2.0)        , interpolated_YM_roa_list)
+    sym_bps_list = map(lambda sym_YM_val_list: sum(map(lambda x: (NUM_OF_QUARTERS_FOR_CUR_EARG-x[0])*x[1], enumerate(map(lambda y: y[1], list(reversed(sym_YM_val_list))[:NUM_OF_QUARTERS_FOR_CUR_EARG])))) / (NUM_OF_QUARTERS_FOR_CUR_EARG*(NUM_OF_QUARTERS_FOR_CUR_EARG+1)/2.0)        , interpolated_YM_bps_list)
+    sym_totliabps_list = map(lambda sym_YM_val_list: sum(map(lambda x: (NUM_OF_QUARTERS_FOR_CUR_EARG-x[0])*x[1], enumerate(map(lambda y: y[1], list(reversed(sym_YM_val_list))[:NUM_OF_QUARTERS_FOR_CUR_EARG])))) / (NUM_OF_QUARTERS_FOR_CUR_EARG*(NUM_OF_QUARTERS_FOR_CUR_EARG+1)/2.0)  , interpolated_YM_totliabps_list)
+
+    sym_hist_unadj_px_list = map(lambda x: hist_unadj_px_dict[dt][x[0]]*x[2]/x[1], zip(symbol_with_enough_data_list,reporting_curcy_conv_rate_list,price_curcy_conv_rate_list))
     w_a_list = map(lambda s: w_a_dict[s], symbol_with_enough_data_list)
     w_e_list = map(lambda s: w_e_dict[s], symbol_with_enough_data_list)
+    bv_rlzn_yr_list = map(lambda s: bv_rlzn_yr_dict[s], symbol_with_enough_data_list)
+    bv_rcvy_rate_list = map(lambda s: bv_rcvy_rate_dict[s], symbol_with_enough_data_list)
 
     if debug_mode:
-        print "cur_eps_list: %s" % zip(symbol_with_enough_data_list,cur_eps_list)
-        print "cur_roa_list: %s" % zip(symbol_with_enough_data_list,cur_roa_list)
-        print "sym_bps_list: %s" % zip(symbol_with_enough_data_list,sym_bps_list)
+        print "reporting_curcy_conv_rate_list: %s" % zip(symbol_with_enough_data_list,reporting_curcy_conv_rate_list)
+        print "price_curcy_conv_rate_list: %s" % zip(symbol_with_enough_data_list,price_curcy_conv_rate_list)
+        print "cur_eps_list (original currency): %s" % zip(symbol_with_enough_data_list,cur_eps_list)
+        print "cur_roa_list (original currency): %s" % zip(symbol_with_enough_data_list,cur_roa_list)
+        print "sym_bps_list (original currency): %s" % zip(symbol_with_enough_data_list,sym_bps_list)
+        print "sym_totliabps_list (original currency): %s" % zip(symbol_with_enough_data_list,sym_totliabps_list)
+        print "sym_hist_unadj_px_list (reporting currency): %s" % zip(symbol_with_enough_data_list,reporting_curcy_conv_rate_list,price_curcy_conv_rate_list,sym_hist_unadj_px_list)
 
     ###################################################
     # Monte Carlo
     ###################################################
-    irr_sample_list = []
-    NUM_OF_MONTE_CARLO = 1000
+    NUM_OF_MONTE_CARLO = 5000
+
+    ###################################################
+    # Monte Carlo (going concern)
+    ###################################################
     NUM_OF_FUTURE_PERIODS = 100
-    while len(irr_sample_list) < NUM_OF_MONTE_CARLO:
+    irr_goingconcern_sample_list = []
+    irr_ext_drvr_sample_list = []
+    irr_asset_drvr_sample_list = []
+    while len(irr_goingconcern_sample_list) < NUM_OF_MONTE_CARLO:
+        # rand_matrix = np.random.multivariate_normal([0]*len(YM_eps_chg_stndzd_yr_end_list+YM_roa_chg_stndzd_yr_end_list), eps_roa_chg_cov_matrix, NUM_OF_FUTURE_PERIODS).T.tolist()
+        # # if debug_mode:
+        # #     print "rand_matrix len %s %s" % (len(rand_matrix),len(rand_matrix[0]))
+        # dvd_rlzn_path_list = map(lambda x: get_divd_rlzn_external_driver(x[1],x[2],x[3]) if x[0] == 0 else get_divd_rlzn_asset_driver(x[1],x[2],x[3],x[4]), zip([0]*len(cur_eps_list)+[1]*len(cur_roa_list),cur_eps_list+cur_roa_list,rand_matrix,sym_bps_list*2,sym_totliabps_list*2))
+        # sym_irr_list = map(lambda x: np.irr([-x[0]] + x[1]), zip(2*sym_hist_unadj_px_list,dvd_rlzn_path_list))
+        # sym_irr_list = map(lambda x: -1.0 if math.isnan(x) else x, sym_irr_list)
+        # ###################################################
+        # # weighted by business nature
+        # ###################################################
+        # sym_irr_list = map(lambda x: x[0]*x[1]+x[2]*x[3], zip(w_e_list,sym_irr_list[:len(sym_irr_list)/2],w_a_list,sym_irr_list[len(sym_irr_list)/2:]))
+        # irr_goingconcern_sample_list.append(sym_irr_list)
+
+        ###################################################
         rand_matrix = np.random.multivariate_normal([0]*len(YM_eps_chg_stndzd_yr_end_list+YM_roa_chg_stndzd_yr_end_list), eps_roa_chg_cov_matrix, NUM_OF_FUTURE_PERIODS).T.tolist()
-        # if debug_mode:
-        #     print "rand_matrix len %s %s" % (len(rand_matrix),len(rand_matrix[0]))
 
-        dvd_rlzn_path_list = map(lambda x: get_divd_rlzn_external_driver(x[1],x[2],x[3]) if x[0] == 0 else get_divd_rlzn_asset_driver(x[1],x[2],x[3],x[4]), zip([0]*len(cur_eps_list)+[1]*len(cur_roa_list),cur_eps_list+cur_roa_list,rand_matrix,sym_bps_list*2,sym_totliabps_list*2))
+        dvd_rlzn_path_list = map(lambda x: get_divd_rlzn_external_driver(x[0],x[1],x[2]), zip(cur_eps_list,rand_matrix[:len(rand_matrix)/2],sym_bps_list))
+        sym_irr_ext_drvr_list = map(lambda x: np.irr([-x[0]] + x[1]), zip(sym_hist_unadj_px_list,dvd_rlzn_path_list))
+        sym_irr_ext_drvr_list = map(lambda x: -1.0 if math.isnan(x) else x, sym_irr_ext_drvr_list)
+        irr_ext_drvr_sample_list.append(sym_irr_ext_drvr_list)
 
-        sym_irr_list = map(lambda x: np.irr([-x[0]] + x[1]), zip(sym_hist_unadj_px_list,dvd_rlzn_path_list))
-        sym_irr_list = map(lambda x: -1.0 if math.isnan(x) else x, sym_irr_list)
+        dvd_rlzn_path_list = map(lambda x: get_divd_rlzn_asset_driver(x[0],x[1],x[2],x[3]), zip(cur_roa_list,rand_matrix[len(rand_matrix)/2:],sym_bps_list,sym_totliabps_list))
+        sym_irr_asset_drvr_list = map(lambda x: np.irr([-x[0]] + x[1]), zip(sym_hist_unadj_px_list,dvd_rlzn_path_list))
+        sym_irr_asset_drvr_list = map(lambda x: -1.0 if math.isnan(x) else x, sym_irr_asset_drvr_list)
+        irr_asset_drvr_sample_list.append(sym_irr_asset_drvr_list)
 
         ###################################################
         # weighted by business nature
         ###################################################
-        sym_irr_list = map(lambda x: x[0]*x[1]+x[2]*x[3], zip(w_e_list,sym_irr_list[:len(sym_irr_list)/2],w_a_list,sym_irr_list[len(sym_irr_list)/2:]))
+        sym_irr_list = map(lambda x: x[0]*x[1]+x[2]*x[3], zip(w_e_list,sym_irr_ext_drvr_list,w_a_list,sym_irr_asset_drvr_list))
 
-        irr_sample_list.append(sym_irr_list)
+        irr_goingconcern_sample_list.append(sym_irr_list)
 
-    irr_corrcoef = np.corrcoef(np.array(irr_sample_list).T).tolist()
-    print "len(irr_corrcoef): %s" % len(irr_corrcoef)
-    print "len(irr_corrcoef[0]): %s" % len(irr_corrcoef[0])
-    print "irr_corrcoef: %s" % (zip(symbol_with_enough_data_list,irr_corrcoef[0]))
+    if debug_mode:
+        irr_goingconcern_corrcoef = np.corrcoef(np.array(irr_goingconcern_sample_list).T).tolist()
+        print "len(irr_goingconcern_corrcoef): %s" % len(irr_goingconcern_corrcoef)
+        print "len(irr_goingconcern_corrcoef[0]): %s" % len(irr_goingconcern_corrcoef[0])
+        # print "irr_goingconcern_corrcoef: %s" % (zip(symbol_with_enough_data_list,irr_goingconcern_corrcoef[0]))
+
+    irr_asset_drvr_mean_list = np.mean(np.array(irr_asset_drvr_sample_list).T, axis=1).tolist()
+    irr_ext_drvr_mean_list = np.mean(np.array(irr_ext_drvr_sample_list).T, axis=1).tolist()
+    irr_goingconcern_mean_list = np.mean(np.array(irr_goingconcern_sample_list).T, axis=1).tolist()
+
+    ###################################################
+    # Monte Carlo (liquidation or M&A)
+    ###################################################
+    irr_liquidation_sample_list = []
+    while len(irr_liquidation_sample_list) < NUM_OF_MONTE_CARLO:
+        cash_flow_list = map(lambda x: [-x[0]] + [0]*int(max(random.randint(0,2*int(x[1]))-1,0)) + [np.random.uniform(max(1.0-2*(1.0-x[2]),0),0.999)*x[3]], zip(sym_hist_unadj_px_list,bv_rlzn_yr_list,bv_rcvy_rate_list,sym_bps_list))
+        # print "cash_flow_list: %s" % zip(symbol_with_enough_data_list,cash_flow_list,sym_hist_unadj_px_list,bv_rlzn_yr_list,bv_rcvy_rate_list,sym_bps_list)
+        sym_irr_list = map(lambda x: np.irr(x), cash_flow_list)
+        sym_irr_list = map(lambda x: -1.0 if math.isnan(x) else x, sym_irr_list)
+        irr_liquidation_sample_list.append(sym_irr_list)
+
+    # if debug_mode:
+    #     print "irr_liquidation_sample_list: %s" % irr_liquidation_sample_list
+
+    if debug_mode:
+        irr_liquidation_corrcoef = np.corrcoef(np.array(irr_liquidation_sample_list).T).tolist()
+        print "len(irr_liquidation_corrcoef): %s" % len(irr_liquidation_corrcoef)
+        print "len(irr_liquidation_corrcoef[0]): %s" % len(irr_liquidation_corrcoef[0])
+        # print "irr_liquidation_corrcoef: %s" % (zip(symbol_with_enough_data_list,irr_liquidation_corrcoef[0]))
+
+    irr_liquidation_mean_list = np.mean(np.array(irr_liquidation_sample_list).T, axis=1).tolist()
+
+
+    ###################################################
+    # Combine the results from various earnings drivers
+    ###################################################
+
+    choice_list = map(lambda x: x[0] >= x[1], zip(irr_goingconcern_mean_list,irr_liquidation_mean_list))
+
+    irr_goingconcern_sample_list = (np.array(irr_goingconcern_sample_list).T).tolist()
+    irr_liquidation_sample_list = (np.array(irr_liquidation_sample_list).T).tolist()
+
+    irr_combined_sample_list = map(lambda x: x[1] if x[0] == True else x[2], zip(choice_list,irr_goingconcern_sample_list,irr_liquidation_sample_list))
+
+    irr_combined_mean_list = np.mean(np.array(irr_combined_sample_list), axis=1).tolist()
+    irr_combined_cov_matrix = np.cov(irr_combined_sample_list).tolist()
+
+    if debug_mode:
+        print "irr_ext_drvr_mean_list irr_asset_drvr_mean_list irr_goingconcern_mean_list irr_liquidation_mean_list irr_combined_mean_list: %s" % ','.join(map(str, zip(symbol_with_enough_data_list,irr_ext_drvr_mean_list,irr_asset_drvr_mean_list,irr_goingconcern_mean_list,irr_liquidation_mean_list,irr_combined_mean_list)))
+
+    ###################################################
+    return irr_combined_mean_list,irr_combined_cov_matrix
 
 
 def preprocess_industry_groups(industry_group_dict):
@@ -1287,24 +1387,48 @@ if __name__ == "__main__":
     ###################################################
     # test get_divd_rlzn_external_driver
     ###################################################
-    cur_eps = 1.0
-    rand_chg_list = np.random.normal(0, 1, 10).tolist()
-    # rand_chg_list = [1.3565494538069889, -0.7328438048764819, -0.9911325496274774, 0.7216603971011765, -1.7010436939161022, -0.05459450695457012, 1.0595518908975685, 1.2771844239978554, 0.3906346389750634, -0.7567610690562201]
-    bps = 10
-    dvd_rlzn_path_list = get_divd_rlzn_external_driver(cur_eps,rand_chg_list,bps)
-    print "rand_chg_list: %s" % map(lambda x: round(x,3), rand_chg_list)
-    print "eps: %s" % [round(cur_eps+sum(rand_chg_list[:(i+1)]),3) for i in range(len(rand_chg_list))]
-    print "divd: %s" % map(lambda x: round(x,3), dvd_rlzn_path_list)
+    irr_list = []
+    while len(irr_list) < 10000:
+        cur_px = 68.1
+        cur_eps = 7.47
+        rand_chg_list = np.random.normal(0, 20, 100).tolist()
+        # rand_chg_list = [1.3565494538069889, -0.7328438048764819, -0.9911325496274774, 0.7216603971011765, -1.7010436939161022, -0.05459450695457012, 1.0595518908975685, 1.2771844239978554, 0.3906346389750634, -0.7567610690562201]
+        bps = 102
+        dvd_rlzn_path_list = get_divd_rlzn_external_driver(cur_eps,rand_chg_list,bps)
+        # print "rand_chg_list: %s" % map(lambda x: round(x,3), rand_chg_list)
+        # print "eps: %s" % [round(cur_eps+sum(rand_chg_list[:(i+1)]),3) for i in range(len(rand_chg_list))]
+        # print "divd: %s" % map(lambda x: round(x,3), dvd_rlzn_path_list)
+        irr = np.irr([-cur_px]+dvd_rlzn_path_list)
+
+        if math.isnan(irr):
+            irr_list.append(-1.0)
+        else:
+            irr_list.append(irr)
+
+        # if not math.isnan(irr):
+        #     irr_list.append(irr)
+
+    print "mean irr: %s" % np.mean(irr_list)
 
 
-    ###################################################
-    # test get_divd_rlzn_asset_driver
-    ###################################################
-    cur_roa = 0.1
-    rand_chg_list = np.random.normal(0, 0.05, 10).tolist()
-    # rand_chg_list = [-0.0076027477677689335, -0.035993399498083986, 0.05761109772056621, -0.049718955849337464, -0.11439030986747334, -0.07305513665411592, -0.06987823955241451, 0.028665312545241586, 0.0031546672341396225, 0.046790743318825205]
-    bps = 10
-    liabps = 10
-    dvd_rlzn_path_list = get_divd_rlzn_asset_driver(cur_roa,rand_chg_list,bps,liabps)
-    print "rand_chg_list: %s" % map(lambda x: round(x,3), rand_chg_list)
-    print "divd: %s" % map(lambda x: round(x,3), dvd_rlzn_path_list)
+    # ###################################################
+    # # test get_divd_rlzn_asset_driver
+    # ###################################################
+    # irr_list = []
+    # while len(irr_list) < 10000:
+    #     cur_px = 68.1
+    #     cur_roa = 0.049
+    #     rand_chg_list = np.random.normal(0, 0.01, 100).tolist()
+    #     # rand_chg_list = [-0.0076027477677689335, -0.035993399498083986, 0.05761109772056621, -0.049718955849337464, -0.11439030986747334, -0.07305513665411592, -0.06987823955241451, 0.028665312545241586, 0.0031546672341396225, 0.046790743318825205]
+    #     bps = 100
+    #     liabps = 40
+    #     dvd_rlzn_path_list = get_divd_rlzn_asset_driver(cur_roa,rand_chg_list,bps,liabps)
+    #     # print "rand_chg_list: %s" % map(lambda x: round(x,3), rand_chg_list)
+    #     # print "divd: %s" % map(lambda x: round(x,3), dvd_rlzn_path_list)
+    #     irr = np.irr([-cur_px]+dvd_rlzn_path_list)
+    #     if math.isnan(irr):
+    #         irr_list.append(-1.0)
+    #     else:
+    #         irr_list.append(irr)
+    #
+    # print "mean irr: %s" % np.mean(irr_list)
