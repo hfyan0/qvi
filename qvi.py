@@ -9,6 +9,8 @@ import scipy.optimize
 import itertools
 import random
 import time
+import multiprocessing as mp
+from pathos.multiprocessing import ProcessingPool as Pool
 
 random.seed(time.time())
 ###################################################
@@ -864,7 +866,7 @@ def calc_irr_mean_ci_before_20170309(config,dt,symbol,ann_sd_sym_rtn,hist_unadj_
 
     return irr_mean_ci_tuple
 
-def calc_irr_mean_cov_after_20170309(config,dt,symbol_list,hist_bps_dict,hist_unadj_px_dict,hist_totliabps_dict,hist_eps_dict,hist_roa_dict,delay_months,debug_mode):
+def calc_irr_mean_cov_after_20170309(config,dt,symbol_list,hist_bps_dict,hist_unadj_px_dict,hist_totliabps_dict,hist_eps_dict,hist_roa_dict,NUM_OF_MONTE_CARLO,delay_months,debug_mode):
     def replace_date_with_YM(date_value_list):
         return map(lambda x: ((x[0].year,x[0].month),x[1]), date_value_list)
 
@@ -1012,6 +1014,12 @@ def calc_irr_mean_cov_after_20170309(config,dt,symbol_list,hist_bps_dict,hist_un
     if debug_mode:
         print "symbol_with_enough_data_list: %s %s" % (dt,symbol_with_enough_data_list)
 
+    ###################################################
+    # return if no data to work with!
+    ###################################################
+    if len(symbol_with_enough_data_list) == 0:
+        return None,None,None,None
+
     interpolated_YM_eps_list  = map(lambda x: x[1], filter(lambda x: x[0] in symbol_with_enough_data_set, zip(symbol_list,interpolated_YM_eps_list)))
     interpolated_YM_bps_list  = map(lambda x: x[1], filter(lambda x: x[0] in symbol_with_enough_data_set, zip(symbol_list,interpolated_YM_bps_list)))
     interpolated_YM_totliabps_list  = map(lambda x: x[1], filter(lambda x: x[0] in symbol_with_enough_data_set, zip(symbol_list,interpolated_YM_totliabps_list)))
@@ -1071,49 +1079,34 @@ def calc_irr_mean_cov_after_20170309(config,dt,symbol_list,hist_bps_dict,hist_un
         print "sym_hist_unadj_px_list (reporting currency): %s" % zip(symbol_with_enough_data_list,reporting_curcy_conv_rate_list,price_curcy_conv_rate_list,sym_hist_unadj_px_list)
 
     ###################################################
-    # Monte Carlo
-    ###################################################
-    NUM_OF_MONTE_CARLO = 5000
-
-    ###################################################
     # Monte Carlo (going concern)
     ###################################################
     NUM_OF_FUTURE_PERIODS = 100
     irr_goingconcern_sample_list = []
-    irr_ext_drvr_sample_list = []
-    irr_asset_drvr_sample_list = []
-    while len(irr_goingconcern_sample_list) < NUM_OF_MONTE_CARLO:
-        # rand_matrix = np.random.multivariate_normal([0]*len(YM_eps_chg_stndzd_yr_end_list+YM_roa_chg_stndzd_yr_end_list), eps_roa_chg_cov_matrix, NUM_OF_FUTURE_PERIODS).T.tolist()
-        # # if debug_mode:
-        # #     print "rand_matrix len %s %s" % (len(rand_matrix),len(rand_matrix[0]))
-        # dvd_rlzn_path_list = map(lambda x: get_divd_rlzn_external_driver(x[1],x[2],x[3]) if x[0] == 0 else get_divd_rlzn_asset_driver(x[1],x[2],x[3],x[4]), zip([0]*len(cur_eps_list)+[1]*len(cur_roa_list),cur_eps_list+cur_roa_list,rand_matrix,sym_bps_list*2,sym_totliabps_list*2))
-        # sym_irr_list = map(lambda x: np.irr([-x[0]] + x[1]), zip(2*sym_hist_unadj_px_list,dvd_rlzn_path_list))
-        # sym_irr_list = map(lambda x: -1.0 if math.isnan(x) else x, sym_irr_list)
-        # ###################################################
-        # # weighted by business nature
-        # ###################################################
-        # sym_irr_list = map(lambda x: x[0]*x[1]+x[2]*x[3], zip(w_e_list,sym_irr_list[:len(sym_irr_list)/2],w_a_list,sym_irr_list[len(sym_irr_list)/2:]))
-        # irr_goingconcern_sample_list.append(sym_irr_list)
 
-        ###################################################
+    def goingconcern_montecarlo_part(not_used):
         rand_matrix = np.random.multivariate_normal([0]*len(YM_eps_chg_stndzd_yr_end_list+YM_roa_chg_stndzd_yr_end_list), eps_roa_chg_cov_matrix, NUM_OF_FUTURE_PERIODS).T.tolist()
 
         dvd_rlzn_path_list = map(lambda x: get_divd_rlzn_external_driver(x[0],x[1],x[2]), zip(cur_eps_list,rand_matrix[:len(rand_matrix)/2],sym_bps_list))
         sym_irr_ext_drvr_list = map(lambda x: np.irr([-x[0]] + x[1]), zip(sym_hist_unadj_px_list,dvd_rlzn_path_list))
         sym_irr_ext_drvr_list = map(lambda x: -1.0 if math.isnan(x) else x, sym_irr_ext_drvr_list)
-        irr_ext_drvr_sample_list.append(sym_irr_ext_drvr_list)
 
         dvd_rlzn_path_list = map(lambda x: get_divd_rlzn_asset_driver(x[0],x[1],x[2],x[3]), zip(cur_roa_list,rand_matrix[len(rand_matrix)/2:],sym_bps_list,sym_totliabps_list))
         sym_irr_asset_drvr_list = map(lambda x: np.irr([-x[0]] + x[1]), zip(sym_hist_unadj_px_list,dvd_rlzn_path_list))
         sym_irr_asset_drvr_list = map(lambda x: -1.0 if math.isnan(x) else x, sym_irr_asset_drvr_list)
-        irr_asset_drvr_sample_list.append(sym_irr_asset_drvr_list)
 
         ###################################################
         # weighted by business nature
         ###################################################
-        sym_irr_list = map(lambda x: x[0]*x[1]+x[2]*x[3], zip(w_e_list,sym_irr_ext_drvr_list,w_a_list,sym_irr_asset_drvr_list))
+        return (map(lambda x: x[0]*x[1]+x[2]*x[3], zip(w_e_list,sym_irr_ext_drvr_list,w_a_list,sym_irr_asset_drvr_list)),sym_irr_ext_drvr_list,sym_irr_asset_drvr_list)
 
-        irr_goingconcern_sample_list.append(sym_irr_list)
+    pool = Pool(mp.cpu_count())
+    irr_goingconcern_montecarloresult_list = pool.map(goingconcern_montecarlo_part, range(NUM_OF_MONTE_CARLO))
+
+    irr_goingconcern_sample_list = map(lambda x: x[0], irr_goingconcern_montecarloresult_list)
+    irr_ext_drvr_sample_list = map(lambda x: x[1], irr_goingconcern_montecarloresult_list)
+    irr_asset_drvr_sample_list = map(lambda x: x[2], irr_goingconcern_montecarloresult_list) 
+    
 
     if debug_mode:
         irr_goingconcern_corrcoef = np.corrcoef(np.array(irr_goingconcern_sample_list).T).tolist()
@@ -1129,12 +1122,12 @@ def calc_irr_mean_cov_after_20170309(config,dt,symbol_list,hist_bps_dict,hist_un
     # Monte Carlo (liquidation or M&A)
     ###################################################
     irr_liquidation_sample_list = []
-    while len(irr_liquidation_sample_list) < NUM_OF_MONTE_CARLO:
+    def liquidation_montecarlo_part(not_used):
         cash_flow_list = map(lambda x: [-x[0]] + [0]*int(max(random.randint(0,2*int(x[1]))-1,0)) + [np.random.uniform(max(1.0-2*(1.0-x[2]),0),0.999)*x[3]], zip(sym_hist_unadj_px_list,bv_rlzn_yr_list,bv_rcvy_rate_list,sym_bps_list))
         # print "cash_flow_list: %s" % zip(symbol_with_enough_data_list,cash_flow_list,sym_hist_unadj_px_list,bv_rlzn_yr_list,bv_rcvy_rate_list,sym_bps_list)
-        sym_irr_list = map(lambda x: np.irr(x), cash_flow_list)
-        sym_irr_list = map(lambda x: -1.0 if math.isnan(x) else x, sym_irr_list)
-        irr_liquidation_sample_list.append(sym_irr_list)
+        return map(lambda x: -1.0 if math.isnan(x) else x, map(lambda x: np.irr(x), cash_flow_list))
+
+    irr_liquidation_sample_list = pool.map(liquidation_montecarlo_part, range(NUM_OF_MONTE_CARLO))
 
     # if debug_mode:
     #     print "irr_liquidation_sample_list: %s" % irr_liquidation_sample_list
@@ -1151,7 +1144,6 @@ def calc_irr_mean_cov_after_20170309(config,dt,symbol_list,hist_bps_dict,hist_un
     ###################################################
     # Combine the results from various earnings drivers
     ###################################################
-
     choice_list = map(lambda x: x[0] >= x[1], zip(irr_goingconcern_mean_list,irr_liquidation_mean_list))
 
     irr_goingconcern_sample_list = (np.array(irr_goingconcern_sample_list).T).tolist()
@@ -1166,7 +1158,21 @@ def calc_irr_mean_cov_after_20170309(config,dt,symbol_list,hist_bps_dict,hist_un
         print "irr_ext_drvr_mean_list irr_asset_drvr_mean_list irr_goingconcern_mean_list irr_liquidation_mean_list irr_combined_mean_list: %s" % ','.join(map(str, zip(symbol_with_enough_data_list,irr_ext_drvr_mean_list,irr_asset_drvr_mean_list,irr_goingconcern_mean_list,irr_liquidation_mean_list,irr_combined_mean_list)))
 
     ###################################################
-    return irr_combined_mean_list,irr_combined_cov_matrix
+    # output IRR
+    ###################################################
+    k_sample_file = open(config["general"]["k_sample_file"], "a")
+    k_sample_file.write('\n'.join(map(lambda x: x[0]+':'+','.join(map(str,x[1])), zip(symbol_with_enough_data_list,irr_combined_sample_list))))
+    k_sample_file.close()
+    ###################################################
+
+    irr_combined_ci_list = []
+    for sym_sample_list in irr_combined_sample_list:
+        sorted_sample_list = sorted(sym_sample_list)
+        n = len(sorted_sample_list)
+        irr_combined_ci_list.append((sorted_sample_list[int(float(n)*0.05)],sorted_sample_list[int(float(n)*0.95)]))
+
+    ###################################################
+    return symbol_with_enough_data_list,irr_combined_mean_list,irr_combined_cov_matrix,irr_combined_ci_list
 
 
 def preprocess_industry_groups(industry_group_dict):

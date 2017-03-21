@@ -51,6 +51,7 @@ rebalance_date_list = map(lambda y: y[1], filter(lambda x: x[0]%rebalance_interv
 hit_or_miss_list = []
 hit_or_miss_total_count = 0.0
 for dt in rebalance_date_list:
+    # print dt
     symbol_list = sorted(list(traded_symbol_set))
     symbol_list = filter(lambda x: x in hist_adj_px_dict[dt], symbol_list)
     symbol_list = filter(lambda x: x in hist_unadj_px_dict[dt], symbol_list)
@@ -63,17 +64,23 @@ for dt in rebalance_date_list:
     cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(sym_time_series_list, specific_riskiness_list)
 
     # irr_mean_ci_tuple_list = map(lambda s: calc_irr_mean_ci_before_20170309(config_common,dt,s[1],math.sqrt(cov_matrix[s[0]][s[0]]),hist_unadj_px_dict,hist_eps_dict,hist_bps_dict,int(config["general"]["confidence_level"]),AUDIT_DELAY,False), enumerate(symbol_list))
-    calc_irr_mean_cov_after_20170309(config_common,dt,symbol_list,hist_bps_dict,hist_unadj_px_dict,hist_totliabps_dict,hist_eps_dict,hist_roa_dict,AUDIT_DELAY,True)
+    symbol_with_enough_data_list,irr_combined_mean_list,irr_combined_cov_list,irr_combined_ci_list = calc_irr_mean_cov_after_20170309(config_common,dt,symbol_list,hist_bps_dict,hist_unadj_px_dict,hist_totliabps_dict,hist_eps_dict,hist_roa_dict,10000,AUDIT_DELAY,False)
+    if any(map(lambda x: x is None, [irr_combined_mean_list,irr_combined_cov_list,irr_combined_ci_list])):
+        continue
 
-    # prep_tot_rtn_list = map(lambda s: map(lambda v: v[2], filter(lambda x: x[0]>=dt, filter(lambda x: x[1]==s, hist_adj_px_list_sorted))), symbol_list)
-    #
-    # ###################################################
-    # num_of_days_actual_rtn = int(config["general"]["num_of_days_actual_rtn"])
-    # annualized_tot_rtn_list = map(lambda x: round(math.pow(x[num_of_days_actual_rtn]/x[0],252.0/float(num_of_days_actual_rtn))-1.0,5) if len(x) > num_of_days_actual_rtn else None, prep_tot_rtn_list)
-    # ###################################################
-    #
-    # hit_or_miss_list.append(map(lambda x: ( 1.0 if ((x[1]>x[0][1] and x[1]<x[0][2])) else -1.0 ) if all(map(lambda y: y is not None, x[0]+[x[1]])) else 0.0, zip(irr_mean_ci_tuple_list,annualized_tot_rtn_list)))
-    # cum_hit_count = float(len(filter(lambda x: x > 0.001, map(lambda x: x[0], hit_or_miss_list))))
-    # hit_or_miss_total_count = len(filter(lambda x: abs(x) > 0.001, map(lambda x: x[0], hit_or_miss_list)))
-    # hit_prob_list = [round(cum_hit_count/hit_or_miss_total_count,5) if hit_or_miss_total_count > 0 else None]
-    # print str(dt)+" "+'='.join(map(str, zip(symbol_list,irr_mean_ci_tuple_list,hit_prob_list,annualized_tot_rtn_list)))
+    irr_mean_ci_tuple_list = map(lambda x: [x[0],x[1][0],x[1][1]], zip(irr_combined_mean_list,irr_combined_ci_list))
+
+    # print "irr_mean_ci_tuple_list: %s" % irr_mean_ci_tuple_list
+
+    prep_tot_rtn_list = map(lambda s: map(lambda v: v[2], filter(lambda x: x[0]>=dt, filter(lambda x: x[1]==s, hist_adj_px_list_sorted))), symbol_list)
+
+    ###################################################
+    num_of_days_actual_rtn = int(config["general"]["num_of_days_actual_rtn"])
+    annualized_tot_rtn_list = map(lambda x: round(math.pow(x[num_of_days_actual_rtn]/x[0],252.0/float(num_of_days_actual_rtn))-1.0,5) if len(x) > num_of_days_actual_rtn else None, prep_tot_rtn_list)
+    ###################################################
+
+    hit_or_miss_list.append(map(lambda x: ( 1.0 if ((x[1]>x[0][1] and x[1]<x[0][2])) else -1.0 ) if all(map(lambda y: y is not None, x[0]+[x[1]])) else 0.0, zip(irr_mean_ci_tuple_list,annualized_tot_rtn_list)))
+    cum_hit_count = float(len(filter(lambda x: x > 0.001, map(lambda x: x[0], hit_or_miss_list))))
+    hit_or_miss_total_count = len(filter(lambda x: abs(x) > 0.001, map(lambda x: x[0], hit_or_miss_list)))
+    hit_prob_list = [round(cum_hit_count/hit_or_miss_total_count,5) if hit_or_miss_total_count > 0 else None]
+    print str(dt)+" "+'='.join(map(str, zip(symbol_list,irr_mean_ci_tuple_list,hit_prob_list,annualized_tot_rtn_list)))
