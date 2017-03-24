@@ -44,6 +44,15 @@ hsi_hhi_constituents_list = map(lambda x: (x[0],datetime.strptime(x[1],"%Y-%m-%d
 dow_constituents_list = sorted(map(lambda x: (datetime.strptime(x[0],"%Y-%m-%d").date(),x[1:]), read_file(config_common["general"]["dow_constituents"])), key=lambda y: y[0])
 
 ###################################################
+hist_adj_px_dict = get_hist_data_key_date(config_common["hist_data"]["hist_adj_px"])
+hist_adj_px_list_sorted = sorted(list(set(map(lambda x: (datetime.strptime(x[0],"%Y-%m-%d").date(),x[1],float(x[2])), read_file(config_common["hist_data"]["hist_adj_px"])))),key=lambda y: y[0])
+hist_unadj_px_dict = get_hist_data_key_date(config_common["hist_data"]["hist_unadj_px"])
+
+hist_bps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_bps"])
+hist_eps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_eps"])
+hist_roa_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_roa"])
+hist_totliabps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_totliabps"])
+
 # hist_intexp_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_intexp"])
 # hist_cogs_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_cogs"])
 # hist_revenue_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_revenue"])
@@ -51,19 +60,11 @@ dow_constituents_list = sorted(map(lambda x: (datetime.strptime(x[0],"%Y-%m-%d")
 # hist_oper_roe_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_oper_roe"])
 # hist_totequity_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_totequity"])
 # hist_operatingexp_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_operatingexp"])
-hist_adj_px_dict = get_hist_data_key_date(config_common["hist_data"]["hist_adj_px"])
-hist_adj_px_list_sorted = sorted(list(set(map(lambda x: (datetime.strptime(x[0],"%Y-%m-%d").date(),x[1],float(x[2])), read_file(config_common["hist_data"]["hist_adj_px"])))),key=lambda y: y[0])
-hist_unadj_px_dict = get_hist_data_key_date(config_common["hist_data"]["hist_unadj_px"])
-
-hist_bps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_bps"])
 # hist_totasset_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_totasset"])
 # hist_oper_eps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_oper_eps"])
-hist_eps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_eps"])
-hist_roa_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_roa"])
 # hist_stattaxrate_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_stattaxrate"])
 # hist_operincm_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_operincm"])
 # hist_costofdebt_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_costofdebt"])
-hist_totliabps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_totliabps"])
 
 ###################################################
 industry_groups_list = get_industry_groups(preprocess_industry_groups(config_common["industry_group"]))
@@ -93,8 +94,8 @@ for dt in rebalance_date_list:
     if len(symbol_list) < min_no_of_avb_sym:
         continue
 
+    # print calc_irr_mean_cov_after_20170309(config_common,dt,symbol_list,hist_bps_dict,hist_unadj_px_dict,hist_totliabps_dict,hist_eps_dict,hist_roa_dict,5000,AUDIT_DELAY,True)
     # expected_rtn_list = calc_expected_return_before_201703(config_common,dt,symbol_list,hist_bps_dict,hist_unadj_px_dict,hist_operincm_dict,hist_totasset_dict,hist_totliabps_dict,hist_costofdebt_dict,hist_stattaxrate_dict,hist_oper_eps_dict,hist_eps_dict,hist_roa_dict,AUDIT_DELAY,False)
-    print calc_irr_mean_cov_after_20170309(config_common,dt,symbol_list,hist_bps_dict,hist_unadj_px_dict,hist_totliabps_dict,hist_eps_dict,hist_roa_dict,5000,AUDIT_DELAY,True)
     # # print str(dt) + ": " + ', '.join(map(lambda x: x[0]+":["+str(round(x[1],3))+"]:a_"+str(round(x[2],3))+";e_"+str(round(x[3],3))+";b_"+str(round(x[4],3)), zip(symbol_list,expected_rtn_list,expected_rtn_asset_driver_list,expected_rtn_external_driver_list,expected_rtn_bv_list)))
     # ###################################################
     #
