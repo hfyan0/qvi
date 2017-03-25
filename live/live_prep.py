@@ -64,6 +64,6 @@ with open(config["general"]["prep_data_folder"]+"/hist_roa_dict.pkl", "w+") as h
 with open(config["general"]["prep_data_folder"]+"/hist_totliabps_dict.pkl", "w+") as hist_totliabps_dict_file:
     cPickle.dump(hist_totliabps_dict,hist_totliabps_dict_file)
 
-calc_irr_mean_cov_after_20170309_prep(config_common,config["general"]["prep_data_folder"],datetime.now().date(),symbol_list,hist_bps_dict,hist_totliabps_dict,hist_eps_dict,hist_roa_dict,int(config["general"]["monte_carlo_num_of_times"]),0,True)
+calc_irr_mean_cov_after_20170309_prep(config_common,config["general"]["prep_data_folder"],datetime.now().date(),symbol_list,hist_bps_dict,hist_totliabps_dict,hist_eps_dict,hist_roa_dict,int(config["general"]["monte_carlo_num_of_times"]),int(config["general"]["num_of_fut_divd_periods"]),0,True)
 
 

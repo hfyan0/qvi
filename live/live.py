@@ -54,7 +54,7 @@ industry_groups_list = get_industry_groups(ind_grp_list_1)
 
 
 # irr_combined_mean_list,irr_combined_cov_list,irr_combined_ci_list =
-calc_irr_mean_cov_after_20170309_live(config_common,config["general"]["prep_data_folder"],datetime.now().date(),symbol_list,symbol_with_enough_fundl_list,hist_unadj_px_dict)
+calc_irr_mean_cov_after_20170309_live(config_common,config["general"]["prep_data_folder"],datetime.now().date(),symbol_with_enough_fundl_list,hist_unadj_px_dict,True)
 
 
 
