@@ -1153,44 +1153,37 @@ def calc_irr_mean_cov_after_20170309_live(config,prep_data_folder,dt,symbol_with
         fa = open(prep_data_folder+'/'+asset_drvr_dvd_rlzn_path_sample_file,'r')
 
         while True:
-            # print datetime.now()
             fe_line = fe.readline().strip()
             fa_line = fa.readline().strip()
 
             if not fe_line or not fa_line:
                 break
 
-            # print datetime.now()
             extnl_drvr_dvd_rlzn_path_list = map(lambda x: map(lambda x: float(x), x.split(',')), fe_line.split('|'))
             asset_drvr_dvd_rlzn_path_list = map(lambda x: map(lambda x: float(x), x.split(',')), fa_line.split('|'))
 
-            # print datetime.now()
             # print "len sym_hist_unadj_px_list: %s" % len(sym_hist_unadj_px_list)
             # print "len extnl_drvr_dvd_rlzn_path_list: %s" % len(extnl_drvr_dvd_rlzn_path_list)
             # print datetime.now()
             sym_irr_extnl_drvr_list = map(lambda x: np.irr([-x[0]] + x[1]), zip(sym_hist_unadj_px_list,extnl_drvr_dvd_rlzn_path_list))
             sym_irr_extnl_drvr_list = map(lambda x: -1.0 if math.isnan(x) else x, sym_irr_extnl_drvr_list)
 
-            # print datetime.now()
             sym_irr_asset_drvr_list = map(lambda x: np.irr([-x[0]] + x[1]), zip(sym_hist_unadj_px_list,asset_drvr_dvd_rlzn_path_list))
             sym_irr_asset_drvr_list = map(lambda x: -1.0 if math.isnan(x) else x, sym_irr_asset_drvr_list)
 
             ###################################################
             # weighted by business nature
             ###################################################
-            # print datetime.now()
             irr_goingconcern_part_list.append((map(lambda x: x[0]*x[1]+x[2]*x[3], zip(w_e_list,sym_irr_extnl_drvr_list,w_a_list,sym_irr_asset_drvr_list)),sym_irr_extnl_drvr_list,sym_irr_asset_drvr_list))
-            # print "len(irr_goingconcern_part_list): %s" % len(irr_goingconcern_part_list)
 
         fe.close()
         fa.close()
         return irr_goingconcern_part_list
 
     irr_goingconcern_list = Pool(mp.cpu_count()*3/4).map(goingconcern_irr_part, zip(extnl_drvr_dvd_rlzn_path_sample_file_list,asset_drvr_dvd_rlzn_path_sample_file_list))
-
-    irr_goingconcern_sample_list = map(lambda x: x[0], irr_goingconcern_list)
-    irr_extnl_drvr_sample_list = map(lambda x: x[1], irr_goingconcern_list)
-    irr_asset_drvr_sample_list = map(lambda x: x[2], irr_goingconcern_list) 
+    irr_goingconcern_sample_list = [j for i in map(lambda x: map(lambda y: y[0], x), irr_goingconcern_list) for j in i]
+    irr_extnl_drvr_sample_list = [j for i in map(lambda x: map(lambda y: y[1], x), irr_goingconcern_list) for j in i]
+    irr_asset_drvr_sample_list = [j for i in map(lambda x: map(lambda y: y[2], x), irr_goingconcern_list) for j in i]
 
     # print irr_goingconcern_sample_list
 
@@ -1217,7 +1210,7 @@ def calc_irr_mean_cov_after_20170309_live(config,prep_data_folder,dt,symbol_with
         fliq = open(prep_data_folder+'/'+liq_drvr_dvd_rlzn_path_sample_file,'r')
 
         while True:
-            fliq_line = fa.readline().strip()
+            fliq_line = fliq.readline().strip()
             if not fliq_line:
                 break
             liq_drvr_dvd_rlzn_path_list = map(lambda x: map(lambda x: float(x), x.split(',')), fliq_line.split('|'))
@@ -1229,6 +1222,7 @@ def calc_irr_mean_cov_after_20170309_live(config,prep_data_folder,dt,symbol_with
         return irr_liq_part_list
 
     irr_liquidation_sample_list = Pool(mp.cpu_count()*3/4).map(liquidation_irr_part, liq_drvr_dvd_rlzn_path_sample_file_list)
+    irr_liquidation_sample_list = [j for i in irr_liquidation_sample_list for j in i]
 
     # if debug_mode:
     #     print "irr_liquidation_sample_list: %s" % irr_liquidation_sample_list
@@ -1242,7 +1236,6 @@ def calc_irr_mean_cov_after_20170309_live(config,prep_data_folder,dt,symbol_with
     ###################################################
 
     irr_liquidation_mean_list = np.mean(np.array(irr_liquidation_sample_list).T, axis=1).tolist()
-
 
     ###################################################
     # Combine the results from various earnings drivers
@@ -1258,14 +1251,24 @@ def calc_irr_mean_cov_after_20170309_live(config,prep_data_folder,dt,symbol_with
     irr_combined_cov_matrix = np.cov(irr_combined_sample_list).tolist()
 
     if debug_mode:
-        print "irr_extnl_drvr_mean_list irr_asset_drvr_mean_list irr_goingconcern_mean_list irr_liquidation_mean_list irr_combined_mean_list: %s" % ','.join(map(str, zip(symbol_with_enough_fundl_list,irr_extnl_drvr_mean_list,irr_asset_drvr_mean_list,irr_goingconcern_mean_list,irr_liquidation_mean_list,irr_combined_mean_list)))
+        print "irr_extnl_drvr_mean_list irr_asset_drvr_mean_list irr_goingconcern_mean_list irr_liquidation_mean_list irr_combined_mean_list"
+        print '\n'.join(map(str, zip(symbol_with_enough_fundl_list,irr_extnl_drvr_mean_list,irr_asset_drvr_mean_list,irr_goingconcern_mean_list,irr_liquidation_mean_list,irr_combined_mean_list)))
 
     ###################################################
     # output IRR
     ###################################################
     if debug_mode:
-        k_sample_file = open(config["general"]["k_sample_file"], "a")
+        k_sample_file = open(prep_data_folder+"/k_samples_combined.csv", "w")
         k_sample_file.write('\n'.join(map(lambda x: x[0]+':'+','.join(map(str,x[1])), zip(symbol_with_enough_fundl_list,irr_combined_sample_list))))
+        k_sample_file.close()
+        k_sample_file = open(prep_data_folder+"/k_samples_extnl_drvr.csv", "w")
+        k_sample_file.write('\n'.join(map(lambda x: x[0]+':'+','.join(map(str,x[1])), zip(symbol_with_enough_fundl_list,irr_extnl_drvr_sample_list))))
+        k_sample_file.close()
+        k_sample_file = open(prep_data_folder+"/k_samples_asset_drvr.csv", "w")
+        k_sample_file.write('\n'.join(map(lambda x: x[0]+':'+','.join(map(str,x[1])), zip(symbol_with_enough_fundl_list,irr_asset_drvr_sample_list))))
+        k_sample_file.close()
+        k_sample_file = open(prep_data_folder+"/k_samples_liquidation.csv", "w")
+        k_sample_file.write('\n'.join(map(lambda x: x[0]+':'+','.join(map(str,x[1])), zip(symbol_with_enough_fundl_list,irr_liquidation_sample_list))))
         k_sample_file.close()
     ###################################################
 
@@ -1276,7 +1279,7 @@ def calc_irr_mean_cov_after_20170309_live(config,prep_data_folder,dt,symbol_with
         irr_combined_ci_list.append((sorted_sample_list[int(float(n)*0.05)],sorted_sample_list[int(float(n)*0.95)]))
 
     ###################################################
-    return symbol_with_enough_fundl_list,irr_combined_mean_list,irr_combined_cov_matrix,irr_combined_ci_list
+    return irr_combined_mean_list,irr_combined_cov_matrix,irr_combined_ci_list
 
 
 def preprocess_industry_groups(industry_group_dict):

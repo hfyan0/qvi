@@ -18,6 +18,15 @@ from qvi import CurrencyConverter,calc_cov_matrix_annualized,intWithCommas,justi
 config = ConfigObj('config.ini')
 config_common = ConfigObj(config["general"]["common_config"])
 
+###################################################
+import socket
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.connect(("gmail.com",80))
+local_ip = (s.getsockname()[0])
+s.close()
+prep_data_folder = dict(map(lambda x: x.split(':'), config["general"]["prep_data_folder"]))[local_ip]
+###################################################
+
 print "Start reading data..."
 symbol_list = sorted([ i for k in map(lambda x: config["general"][x] if isinstance(config["general"][x], (list, tuple)) else [config["general"][x]], filter(lambda x: "traded_symbols" in x, config["general"].keys())) for i in k ])
 hedging_symbol_list = config["general"]["hedging_symbols"]
@@ -43,9 +52,9 @@ for i in range(len(hedging_symbol_list)):
     cov_matrix = np.delete(cov_matrix, 0, 0)
     cov_matrix = np.delete(cov_matrix, 0, 1)
 
-with open(config["general"]["prep_data_folder"]+"/aug_cov_matrix.pkl", "w+") as aug_cov_matrix_file:
+with open(prep_data_folder+"/aug_cov_matrix.pkl", "w+") as aug_cov_matrix_file:
     cPickle.dump(aug_cov_matrix,aug_cov_matrix_file)
-with open(config["general"]["prep_data_folder"]+"/cov_matrix.pkl", "w+") as cov_matrix_file:
+with open(prep_data_folder+"/cov_matrix.pkl", "w+") as cov_matrix_file:
     cPickle.dump(cov_matrix,cov_matrix_file)
 
 
@@ -55,15 +64,15 @@ hist_eps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_eps"])
 hist_roa_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_roa"])
 hist_totliabps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_totliabps"])
 
-with open(config["general"]["prep_data_folder"]+"/hist_bps_dict.pkl", "w+") as hist_bps_dict_file:
+with open(prep_data_folder+"/hist_bps_dict.pkl", "w+") as hist_bps_dict_file:
     cPickle.dump(hist_bps_dict,hist_bps_dict_file)
-with open(config["general"]["prep_data_folder"]+"/hist_eps_dict.pkl", "w+") as hist_eps_dict_file:
+with open(prep_data_folder+"/hist_eps_dict.pkl", "w+") as hist_eps_dict_file:
     cPickle.dump(hist_eps_dict,hist_eps_dict_file)
-with open(config["general"]["prep_data_folder"]+"/hist_roa_dict.pkl", "w+") as hist_roa_dict_file:
+with open(prep_data_folder+"/hist_roa_dict.pkl", "w+") as hist_roa_dict_file:
     cPickle.dump(hist_roa_dict,hist_roa_dict_file)
-with open(config["general"]["prep_data_folder"]+"/hist_totliabps_dict.pkl", "w+") as hist_totliabps_dict_file:
+with open(prep_data_folder+"/hist_totliabps_dict.pkl", "w+") as hist_totliabps_dict_file:
     cPickle.dump(hist_totliabps_dict,hist_totliabps_dict_file)
 
-calc_irr_mean_cov_after_20170309_prep(config_common,config["general"]["prep_data_folder"],datetime.now().date(),symbol_list,hist_bps_dict,hist_totliabps_dict,hist_eps_dict,hist_roa_dict,int(config["general"]["monte_carlo_num_of_times"]),int(config["general"]["num_of_fut_divd_periods"]),0,True)
+calc_irr_mean_cov_after_20170309_prep(config_common,prep_data_folder,datetime.now().date(),symbol_list,hist_bps_dict,hist_totliabps_dict,hist_eps_dict,hist_roa_dict,int(config["general"]["monte_carlo_num_of_times"]),int(config["general"]["num_of_fut_divd_periods"]),0,True)
 
 
