@@ -1109,17 +1109,18 @@ def calc_irr_mean_cov_after_20170309_prep(config,prep_data_folder,dt,symbol_list
         n,num_montecarlo = tup
         fliq = open(prep_data_folder+"/liq_drvr_dvd_rlzn_path_samples"+"_"+str(n)+".csv", "wb")
         for _ in itertools.repeat(None, num_montecarlo):
-            cash_flow_list = map(lambda x: [0]*int(max(random.randint(0,2*int(x[0]))-1,0)) + [np.random.uniform(max(1.0-2*(1.0-x[1]),0),0.999)*x[2]], zip(bv_rlzn_yr_list,bv_rcvy_rate_list,sym_bps_list))
+            cash_flow_list = map(lambda x: [0]*int(max(random.randint(0,2*int(x[0]))-1,0)) + [np.random.uniform(max(1.0-2*(1.0-x[1]),0.001),0.999)*max(x[2],0)], zip(bv_rlzn_yr_list,bv_rcvy_rate_list,sym_bps_list))
             fliq.write('|'.join(map(lambda x: ','.join(map(str,x)), cash_flow_list)))
             fliq.write('\n')
         fliq.close()
 
-    num_of_jobs = 10
-    Pool(mp.cpu_count()*3/4).map(goingconcern_montecarlo_prep, map(lambda x: (x,int(NUM_OF_MONTE_CARLO/num_of_jobs)), range(num_of_jobs)))
-    Pool(mp.cpu_count()*3/4).map(liquidation_montecarlo_prep, map(lambda x: (x,int(NUM_OF_MONTE_CARLO/num_of_jobs)), range(num_of_jobs)))
+    num_of_jobs = int(mp.cpu_count()*float(config["general"]["percentage_of_cpu_cores_to_use"]))
+    Pool(num_of_jobs).map(goingconcern_montecarlo_prep, map(lambda x: (x,int(NUM_OF_MONTE_CARLO/num_of_jobs)), range(num_of_jobs)))
+    Pool(num_of_jobs).map(liquidation_montecarlo_prep, map(lambda x: (x,int(NUM_OF_MONTE_CARLO/num_of_jobs)), range(num_of_jobs)))
 
 def calc_irr_mean_cov_after_20170309_live(config,prep_data_folder,dt,symbol_with_enough_fundl_list,hist_unadj_px_dict,debug_mode):
 
+    rtn_tuple = None,None,None
     curcy_converter = CurrencyConverter(config["currency_rate"])
     reporting_curcy_conv_rate_list = map(lambda s: curcy_converter.get_conv_rate_to_hkd(config["reporting_currency"].get(s,config["reporting_currency"]["default"]),dt), symbol_with_enough_fundl_list)
     price_curcy_conv_rate_list = map(lambda s: curcy_converter.get_conv_rate_to_hkd(config["price_currency"].get(s,config["price_currency"]["default"]),dt), symbol_with_enough_fundl_list)
@@ -1165,10 +1166,10 @@ def calc_irr_mean_cov_after_20170309_live(config,prep_data_folder,dt,symbol_with
             # print "len sym_hist_unadj_px_list: %s" % len(sym_hist_unadj_px_list)
             # print "len extnl_drvr_dvd_rlzn_path_list: %s" % len(extnl_drvr_dvd_rlzn_path_list)
             # print datetime.now()
-            sym_irr_extnl_drvr_list = map(lambda x: np.irr([-x[0]] + x[1]), zip(sym_hist_unadj_px_list,extnl_drvr_dvd_rlzn_path_list))
+            sym_irr_extnl_drvr_list = map(lambda x: np.irr([-x[0]] + x[1]) if (x[0] > 0.001 and len(x[1]) > 0 and any(map(lambda x: x > 0, x[1]))) else -1.0, zip(sym_hist_unadj_px_list,extnl_drvr_dvd_rlzn_path_list))
             sym_irr_extnl_drvr_list = map(lambda x: -1.0 if math.isnan(x) else x, sym_irr_extnl_drvr_list)
 
-            sym_irr_asset_drvr_list = map(lambda x: np.irr([-x[0]] + x[1]), zip(sym_hist_unadj_px_list,asset_drvr_dvd_rlzn_path_list))
+            sym_irr_asset_drvr_list = map(lambda x: np.irr([-x[0]] + x[1]) if (x[0] > 0.001 and len(x[1]) > 0 and any(map(lambda x: x > 0, x[1]))) else -1.0, zip(sym_hist_unadj_px_list,asset_drvr_dvd_rlzn_path_list))
             sym_irr_asset_drvr_list = map(lambda x: -1.0 if math.isnan(x) else x, sym_irr_asset_drvr_list)
 
             ###################################################
@@ -1180,7 +1181,7 @@ def calc_irr_mean_cov_after_20170309_live(config,prep_data_folder,dt,symbol_with
         fa.close()
         return irr_goingconcern_part_list
 
-    irr_goingconcern_list = Pool(mp.cpu_count()*3/4).map(goingconcern_irr_part, zip(extnl_drvr_dvd_rlzn_path_sample_file_list,asset_drvr_dvd_rlzn_path_sample_file_list))
+    irr_goingconcern_list = Pool(int(mp.cpu_count()*float(config["general"]["percentage_of_cpu_cores_to_use"]))).map(goingconcern_irr_part, zip(extnl_drvr_dvd_rlzn_path_sample_file_list,asset_drvr_dvd_rlzn_path_sample_file_list))
     irr_goingconcern_sample_list = [j for i in map(lambda x: map(lambda y: y[0], x), irr_goingconcern_list) for j in i]
     irr_extnl_drvr_sample_list = [j for i in map(lambda x: map(lambda y: y[1], x), irr_goingconcern_list) for j in i]
     irr_asset_drvr_sample_list = [j for i in map(lambda x: map(lambda y: y[2], x), irr_goingconcern_list) for j in i]
@@ -1195,9 +1196,16 @@ def calc_irr_mean_cov_after_20170309_live(config,prep_data_folder,dt,symbol_with
         print "irr_goingconcern_corrcoef: %s" % (zip(symbol_with_enough_fundl_list,irr_goingconcern_corrcoef[0]))
     ###################################################
 
-    irr_goingconcern_mean_list = np.mean(np.array(irr_goingconcern_sample_list).T, axis=1).tolist()
-    irr_extnl_drvr_mean_list = np.mean(np.array(irr_extnl_drvr_sample_list).T, axis=1).tolist()
-    irr_asset_drvr_mean_list = np.mean(np.array(irr_asset_drvr_sample_list).T, axis=1).tolist()
+    try:
+        # irr_goingconcern_mean_list = np.mean(np.array(irr_goingconcern_sample_list).T, axis=1).tolist()
+        # irr_extnl_drvr_mean_list = np.mean(np.array(irr_extnl_drvr_sample_list).T, axis=1).tolist()
+        # irr_asset_drvr_mean_list = np.mean(np.array(irr_asset_drvr_sample_list).T, axis=1).tolist()
+        irr_goingconcern_mean_list = np.mean(np.array(irr_goingconcern_sample_list), axis=0).tolist()
+        irr_extnl_drvr_mean_list = np.mean(np.array(irr_extnl_drvr_sample_list), axis=0).tolist()
+        irr_asset_drvr_mean_list = np.mean(np.array(irr_asset_drvr_sample_list), axis=0).tolist()
+    except Exception, e:
+        print "ERROR: 1"
+        return rtn_tuple
 
     ###################################################
     # Monte Carlo (liquidation or M&A)
@@ -1214,14 +1222,14 @@ def calc_irr_mean_cov_after_20170309_live(config,prep_data_folder,dt,symbol_with
             if not fliq_line:
                 break
             liq_drvr_dvd_rlzn_path_list = map(lambda x: map(lambda x: float(x), x.split(',')), fliq_line.split('|'))
-            sym_irr_liq_drvr_list = map(lambda x: np.irr([-x[0]] + x[1]), zip(sym_hist_unadj_px_list,liq_drvr_dvd_rlzn_path_list))
+            sym_irr_liq_drvr_list = map(lambda x: np.irr([-x[0]] + x[1]) if (x[0] > 0.001 and len(x[1]) > 0 and any(map(lambda x: x > 0, x[1]))) else -1.0, zip(sym_hist_unadj_px_list,liq_drvr_dvd_rlzn_path_list))
             sym_irr_liq_drvr_list = map(lambda x: -1.0 if math.isnan(x) else x, sym_irr_liq_drvr_list)
             irr_liq_part_list.append(sym_irr_liq_drvr_list)
 
         fliq.close()
         return irr_liq_part_list
 
-    irr_liquidation_sample_list = Pool(mp.cpu_count()*3/4).map(liquidation_irr_part, liq_drvr_dvd_rlzn_path_sample_file_list)
+    irr_liquidation_sample_list = Pool(int(mp.cpu_count()*float(config["general"]["percentage_of_cpu_cores_to_use"]))).map(liquidation_irr_part, liq_drvr_dvd_rlzn_path_sample_file_list)
     irr_liquidation_sample_list = [j for i in irr_liquidation_sample_list for j in i]
 
     # if debug_mode:
@@ -1235,7 +1243,12 @@ def calc_irr_mean_cov_after_20170309_live(config,prep_data_folder,dt,symbol_with
         # print "irr_liquidation_corrcoef: %s" % (zip(symbol_with_enough_fundl_list,irr_liquidation_corrcoef[0]))
     ###################################################
 
-    irr_liquidation_mean_list = np.mean(np.array(irr_liquidation_sample_list).T, axis=1).tolist()
+    try:
+        # irr_liquidation_mean_list = np.mean(np.array(irr_liquidation_sample_list).T, axis=1).tolist()
+        irr_liquidation_mean_list = np.mean(np.array(irr_liquidation_sample_list), axis=0).tolist()
+    except Exception, e:
+        print "ERROR: 2"
+        return rtn_tuple
 
     ###################################################
     # Combine the results from various earnings drivers
@@ -1279,7 +1292,8 @@ def calc_irr_mean_cov_after_20170309_live(config,prep_data_folder,dt,symbol_with
         irr_combined_ci_list.append((sorted_sample_list[int(float(n)*0.05)],sorted_sample_list[int(float(n)*0.95)]))
 
     ###################################################
-    return irr_combined_mean_list,irr_combined_cov_matrix,irr_combined_ci_list
+    rtn_tuple = irr_combined_mean_list,irr_combined_cov_matrix,irr_combined_ci_list
+    return rtn_tuple
 
 
 def preprocess_industry_groups(industry_group_dict):

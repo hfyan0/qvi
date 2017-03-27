@@ -41,13 +41,13 @@ rebalance_interval = int(config["general"]["rebalance_interval"])
 N = int(config["general"]["granularity"])
 max_weight_dict = config["max_weight"]
 
-er_hedge_dict = {}
-for h in hedging_symbol_list:
-    # v = config_common["expected_rtn_index"]["expected_return_"+h]
-    # er_hedge_dict[h] = sorted(map(lambda y: (datetime.strptime(y[1],"%Y-%m-%d").date(),float(y[2])), filter(lambda x: x[0]%2==0, zip(range(len(v)-1),v[:-1],v[1:]))), key=lambda x: x[0])
-    er_hedge_dict[h] = sorted(map(lambda x: (datetime.strptime(x[0],"%Y-%m-%d").date(),float(x[1])), read_file(config_common["expected_rtn_index"]["expected_return_"+h])), key=lambda x: x[0])
-
-# print '\n'.join(map(str, er_hedge_dict.items()))
+# er_hedge_dict = {}
+# for h in hedging_symbol_list:
+#     # v = config_common["expected_rtn_index"]["expected_return_"+h]
+#     # er_hedge_dict[h] = sorted(map(lambda y: (datetime.strptime(y[1],"%Y-%m-%d").date(),float(y[2])), filter(lambda x: x[0]%2==0, zip(range(len(v)-1),v[:-1],v[1:]))), key=lambda x: x[0])
+#     er_hedge_dict[h] = sorted(map(lambda x: (datetime.strptime(x[0],"%Y-%m-%d").date(),float(x[1])), read_file(config_common["expected_rtn_index"]["expected_return_"+h])), key=lambda x: x[0])
+#
+# # print '\n'.join(map(str, er_hedge_dict.items()))
 
 
 hsi_hhi_constituents_list = map(lambda x: (x[0],datetime.strptime(x[1],"%Y-%m-%d").date(),datetime.strptime(x[2],"%Y-%m-%d").date()), read_file(config_common["general"]["hsi_hhi_constituents"]))
@@ -138,12 +138,12 @@ for dt in rebalance_date_list:
     # print "aug_cov %s" % (aug_cov_matrix)
     ###################################################
 
-    ###################################################
-    # adjust er_hedge_dict by their volatility
-    ###################################################
-    hedge_sd_dict = dict(map(lambda h: (h[1], math.sqrt(aug_cov_matrix.tolist()[h[0]][h[0]])), enumerate(hedging_symbol_list)))
-    hedge_expected_rtn_dict = dict(map(lambda h: (h[0], filter(lambda d: d[0] <= dt, h[1])[-1][1] - float(config_common["general"]["hedge_exp_rtn_sd_adj_factor"]) * hedge_sd_dict[h[0]]), er_hedge_dict.items()))
-    # print dt, hedge_expected_rtn_dict
+    # ###################################################
+    # # adjust er_hedge_dict by their volatility
+    # ###################################################
+    # hedge_sd_dict = dict(map(lambda h: (h[1], math.sqrt(aug_cov_matrix.tolist()[h[0]][h[0]])), enumerate(hedging_symbol_list)))
+    # hedge_expected_rtn_dict = dict(map(lambda h: (h[0], filter(lambda d: d[0] <= dt, h[1])[-1][1] - float(config_common["general"]["hedge_exp_rtn_sd_adj_factor"]) * hedge_sd_dict[h[0]]), er_hedge_dict.items()))
+    # # print dt, hedge_expected_rtn_dict
 
     ###################################################
     if config["general"]["construction_method"] == "log_optimal_growth":
