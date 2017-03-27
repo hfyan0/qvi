@@ -34,7 +34,6 @@ prep_data_folder = dict(map(lambda x: x.split(':'), config["general"]["prep_data
 print "Start reading data..."
 symbol_list = sorted([ i for k in map(lambda x: config["general"][x] if isinstance(config["general"][x], (list, tuple)) else [config["general"][x]], filter(lambda x: "traded_symbols" in x, config["general"].keys())) for i in k ])
 hedging_symbol_list = config["general"]["hedging_symbols"]
-specific_riskiness_list = len(hedging_symbol_list) * [0.0] + map(lambda s: float(config["specific_riskiness"].get(s,0.0)), symbol_list)
 
 ###################################################
 with open(prep_data_folder+"/symbol_with_enough_fundl.pkl", "rb") as symbol_with_enough_fundl_file:
@@ -147,7 +146,7 @@ if float(config["general"]["markowitz_max_sharpe_weight"] > 0.0):
 ###################################################
 log_optimal_sol_list = []
 if float(config["general"]["log_optimal_growth_weight"]) > 0.0:
-    tmp_sol_list = log_optimal_growth(symbol_with_enough_fundl_list, irr_combined_mean_list, irr_combined_cov_matrix, max_weight_list, industry_groups_list, float(config["max_weight"]["industry"]), float(config["general"]["portfolio_change_inertia"]), float(config["general"]["hatred_for_small_size"]), current_weight_list)
+    tmp_sol_list = log_optimal_growth(symbol_with_enough_fundl_list, irr_combined_mean_list, irr_combined_cov_matrix, max_weight_list, float(config["general"]["min_expected_return"]), industry_groups_list, float(config["max_weight"]["industry"]), float(config["general"]["portfolio_change_inertia"]), float(config["general"]["hatred_for_small_size"]), current_weight_list)
     if tmp_sol_list is None:
         print "Failed to find solution."
         sys.exit(0)

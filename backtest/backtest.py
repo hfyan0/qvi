@@ -41,13 +41,13 @@ rebalance_interval = int(config["general"]["rebalance_interval"])
 N = int(config["general"]["granularity"])
 max_weight_dict = config["max_weight"]
 
-# er_hedge_dict = {}
-# for h in hedging_symbol_list:
-#     # v = config_common["expected_rtn_index"]["expected_return_"+h]
-#     # er_hedge_dict[h] = sorted(map(lambda y: (datetime.strptime(y[1],"%Y-%m-%d").date(),float(y[2])), filter(lambda x: x[0]%2==0, zip(range(len(v)-1),v[:-1],v[1:]))), key=lambda x: x[0])
-#     er_hedge_dict[h] = sorted(map(lambda x: (datetime.strptime(x[0],"%Y-%m-%d").date(),float(x[1])), read_file(config_common["expected_rtn_index"]["expected_return_"+h])), key=lambda x: x[0])
-#
-# # print '\n'.join(map(str, er_hedge_dict.items()))
+er_hedge_dict = {}
+for h in hedging_symbol_list:
+    # v = config_common["expected_rtn_index"]["expected_return_"+h]
+    # er_hedge_dict[h] = sorted(map(lambda y: (datetime.strptime(y[1],"%Y-%m-%d").date(),float(y[2])), filter(lambda x: x[0]%2==0, zip(range(len(v)-1),v[:-1],v[1:]))), key=lambda x: x[0])
+    er_hedge_dict[h] = sorted(map(lambda x: (datetime.strptime(x[0],"%Y-%m-%d").date(),float(x[1])), read_file(config_common["expected_rtn_index"]["expected_return_"+h])), key=lambda x: x[0])
+
+# print '\n'.join(map(str, er_hedge_dict.items()))
 
 
 hsi_hhi_constituents_list = map(lambda x: (x[0],datetime.strptime(x[1],"%Y-%m-%d").date(),datetime.strptime(x[2],"%Y-%m-%d").date()), read_file(config_common["general"]["hsi_hhi_constituents"]))
@@ -108,6 +108,9 @@ for dt in rebalance_date_list:
 
     with open(prep_data_folder+"/symbol_with_enough_fundl.pkl", "rb") as symbol_with_enough_fundl_file:
         symbol_with_enough_fundl_list = cPickle.load(symbol_with_enough_fundl_file)
+    ###################################################
+    # update symbol_list to only those with enought fundamental data!
+    ###################################################
     symbol_list = symbol_with_enough_fundl_list
 
     irr_combined_mean_list,irr_combined_cov_list,irr_combined_ci_list = calc_irr_mean_cov_after_20170309_live(config_common,prep_data_folder,dt,symbol_with_enough_fundl_list,hist_unadj_px_dict,False)
@@ -115,7 +118,6 @@ for dt in rebalance_date_list:
     if any(map(lambda x: x is None, [symbol_with_enough_fundl_list,irr_combined_mean_list,irr_combined_cov_list,irr_combined_ci_list])):
         print "Problem calculating IRR. Exiting..."
         sys.exit(0)
-
 
     # print str(dt) + ": " + ', '.join(map(lambda x: x[0]+":["+str(round(x[1],3))+"]:a_"+str(round(x[2],3))+";e_"+str(round(x[3],3))+";b_"+str(round(x[4],3)), zip(symbol_list,irr_combined_mean_list,expected_rtn_asset_driver_list,expected_rtn_external_driver_list,expected_rtn_bv_list)))
     ###################################################
@@ -125,11 +127,10 @@ for dt in rebalance_date_list:
     to_tgt_rtn = max(irr_combined_mean_list)
 
     ###################################################
-    specific_riskiness_list = len(hedging_symbol_list+symbol_list) * [0.0]
     hist_adj_px_list_fil_sorted = sorted(filter(lambda x: x[0] <= dt, hist_adj_px_list_sorted), key=lambda y: y[0])
     sym_time_series_list = map(lambda s: map(lambda ts: (ts[0],ts[2]), filter(lambda x: x[1] == s, hist_adj_px_list_fil_sorted)), symbol_list)
     hedging_sym_time_series_list = map(lambda s: map(lambda ts: (ts[0],ts[2]), filter(lambda h: h[1] == s, hist_adj_px_list_fil_sorted)), hedging_symbol_list)
-    aug_cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(hedging_sym_time_series_list+sym_time_series_list, specific_riskiness_list)
+    aug_cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(hedging_sym_time_series_list+sym_time_series_list)
 
     cov_matrix = aug_cov_matrix
     for i in range(len(hedging_symbol_list)):
@@ -138,16 +139,16 @@ for dt in rebalance_date_list:
     # print "aug_cov %s" % (aug_cov_matrix)
     ###################################################
 
-    # ###################################################
-    # # adjust er_hedge_dict by their volatility
-    # ###################################################
-    # hedge_sd_dict = dict(map(lambda h: (h[1], math.sqrt(aug_cov_matrix.tolist()[h[0]][h[0]])), enumerate(hedging_symbol_list)))
-    # hedge_expected_rtn_dict = dict(map(lambda h: (h[0], filter(lambda d: d[0] <= dt, h[1])[-1][1] - float(config_common["general"]["hedge_exp_rtn_sd_adj_factor"]) * hedge_sd_dict[h[0]]), er_hedge_dict.items()))
-    # # print dt, hedge_expected_rtn_dict
+    ###################################################
+    # adjust er_hedge_dict by their volatility
+    ###################################################
+    hedge_sd_dict = dict(map(lambda h: (h[1], math.sqrt(aug_cov_matrix.tolist()[h[0]][h[0]])), enumerate(hedging_symbol_list)))
+    hedge_expected_rtn_dict = dict(map(lambda h: (h[0], filter(lambda d: d[0] <= dt, h[1])[-1][1] - float(config_common["general"]["hedge_exp_rtn_sd_adj_factor"]) * hedge_sd_dict[h[0]]), er_hedge_dict.items()))
+    # print dt, hedge_expected_rtn_dict
 
     ###################################################
     if config["general"]["construction_method"] == "log_optimal_growth":
-        log_optimal_sol_list = log_optimal_growth(symbol_list, irr_combined_mean_list, cov_matrix, max_weight_list, industry_groups_list, float(config["max_weight"]["industry"]))
+        log_optimal_sol_list = log_optimal_growth(symbol_list, irr_combined_mean_list, cov_matrix, max_weight_list, float(config["general"]["min_expected_return"]), industry_groups_list, float(config["max_weight"]["industry"]))
         if log_optimal_sol_list is None:
             continue
         log_optimal_sol_list = list(log_optimal_sol_list["result"]['x'])
@@ -155,7 +156,7 @@ for dt in rebalance_date_list:
 
     ###################################################
     if config["general"]["construction_method"] == "markowitz_max_sharpe":
-        markowitz_max_sharpe_sol_list = markowitz_sharpe(symbol_list, irr_combined_mean_list, cov_matrix, max_weight_list, 0.0, industry_groups_list, float(config["max_weight"]["industry"]))
+        markowitz_max_sharpe_sol_list = markowitz_sharpe(symbol_list, irr_combined_mean_list, cov_matrix, max_weight_list, float(config["general"]["min_expected_return"]), industry_groups_list, float(config["max_weight"]["industry"]))
         if markowitz_max_sharpe_sol_list is None:
             continue
         markowitz_max_sharpe_sol_list = list(markowitz_max_sharpe_sol_list["result"]['x'])

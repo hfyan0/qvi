@@ -22,7 +22,6 @@ config_common = ConfigObj(config["general"]["common_config"])
 print "Start reading data..."
 symbol_list = sorted([ i for k in map(lambda x: config["general"][x] if isinstance(config["general"][x], (list, tuple)) else [config["general"][x]], filter(lambda x: "traded_symbols" in x, config["general"].keys())) for i in k ])
 hedging_symbol_list = config["general"]["hedging_symbols"]
-specific_riskiness_list = len(hedging_symbol_list) * [0.0] + map(lambda s: float(config["specific_riskiness"].get(s,0.0)), symbol_list)
 
 ###################################################
 # read time series of prices
@@ -98,7 +97,7 @@ time_check = datetime.now()
 print '\n'.join(map(lambda x: justify_str(x[0],5)+": "+justify_str(round(x[1]*100,2),8)+" %", sorted(expected_rtn_dict.items(),key=lambda x: x[1],reverse=True)))
 
 ###################################################
-aug_cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(sym_time_series_list, specific_riskiness_list)
+aug_cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(sym_time_series_list)
 time_check_printout.append("Calculating covariance matrix: %s" % (datetime.now()-time_check))
 print "Abnormal stdev to check:"
 time_check = datetime.now()

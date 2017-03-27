@@ -14,6 +14,7 @@ import time
 import multiprocessing as mp
 from pathos.multiprocessing import ProcessingPool as Pool
 import cPickle
+import glob
 
 random.seed(time.time())
 ###################################################
@@ -33,6 +34,15 @@ class CurrencyConverter(object):
         return 1.0
     def conv_to_hkd(self,currency,dt,amt):
         return float(amt) * self.get_conv_rate_to_hkd(currency,dt)
+
+def read_file_mul(tup):
+    if len(tup) == 2:
+        file_loc,k = tup
+        with open(file_loc,'r') as f:
+            return (k,[map(lambda x: x.strip(), line.split(',')) for line in f])
+    else:
+        return None
+
 
 def read_file(file_loc):
     with open(file_loc,'r') as f:
@@ -80,7 +90,13 @@ def intWithCommas(x):
 def calc_return_list(price_list):
     return map(lambda x: (x[0]/x[1])-1.0, zip(price_list[1:], price_list[:-1]))
 
-def calc_correl(ts_a,ts_b):
+def calc_correl(tup):
+    tup = list(tup)
+    if len(tup) == 2:
+        ts_a,ts_b = tup
+    else:
+        ts_a,ts_b,i,j = tup
+
     common_date_set = set(map(lambda x: x[0], ts_a)).intersection(set(map(lambda x: x[0], ts_b)))
     if len(common_date_set) < 30:
         return 1.0 # conservative
@@ -91,7 +107,10 @@ def calc_correl(ts_a,ts_b):
     a_ext = a_ext[-common_len:]
     b_ext = b_ext[-common_len:]
 
-    return round(np.corrcoef(calc_return_list(a_ext),calc_return_list(b_ext))[0][1],5)
+    if i is None or j is None:
+        return round(np.corrcoef(calc_return_list(a_ext),calc_return_list(b_ext))[0][1],5)
+    else:
+        return (round(np.corrcoef(calc_return_list(a_ext),calc_return_list(b_ext))[0][1],5),i,j)
 
 def calc_sd(ts):
     if len(ts) < 30:
@@ -120,12 +139,16 @@ def get_annualization_factor(date_list):
         else:
             return 1
 
-def calc_cov_matrix_annualized(sym_time_series_list, specific_riskiness_list):
+def calc_cov_matrix_annualized(sym_time_series_list, num_of_jobs=3):
     ###################################################
     # correlation matrix
     ###################################################
-    ij_correl_dict = dict((tuple(sorted([idx_i,idx_j])), calc_correl(sym_time_series_list[idx_i],sym_time_series_list[idx_j])) for idx_i in range(len(sym_time_series_list)) for idx_j in range(idx_i,len(sym_time_series_list)) )
+    N = len(sym_time_series_list)
+    # ij_correl_dict = dict((tuple(sorted([idx_i,idx_j])), calc_correl(sym_time_series_list[idx_i],sym_time_series_list[idx_j])) for idx_i in range(len(sym_time_series_list)) for idx_j in range(idx_i,len(sym_time_series_list)) )
+    ij_correl_list = Pool(num_of_jobs).map(calc_correl, [j for i in map(lambda idx_j: map(lambda idx_i: (sym_time_series_list[idx_i],sym_time_series_list[idx_j],idx_i,idx_j), range(N)), range(N)) for j in i])
+    ij_correl_dict = dict((grp, list(it_lstup)[0][0]) for grp, it_lstup in itertools.groupby(sorted(ij_correl_list, key=lambda x: (x[1],x[2])), lambda x: (x[1],x[2])))
 
+    # print "ij_correl_dict: %s" % ij_correl_dict
     correl_matrix = []
     for idx_i in range(len(sym_time_series_list)):
         row = []
@@ -151,12 +174,11 @@ def calc_cov_matrix_annualized(sym_time_series_list, specific_riskiness_list):
     sd_list = np.asarray(map(lambda ts: calc_sd(map(lambda x: x[1], ts)), sym_time_series_list))
     annualization_factor_list = (map(lambda ts: get_annualization_factor(map(lambda x: x[0], ts)), sym_time_series_list))
     annualized_sd_list = map(lambda x: x[0]*math.sqrt(x[1]), zip(sd_list.tolist(),annualization_factor_list))
-    annualized_adj_sd_list = map(lambda x: x[0]+x[1], zip(annualized_sd_list,specific_riskiness_list))
-    D = np.diag(annualized_adj_sd_list)
+    D = np.diag(annualized_sd_list)
     # print "D: %s" % str(D)
     # print "correl_matrix: %s" % str(correl_matrix)
     # print "cov_matrix: %s" % str(D*correl_matrix*D)
-    return ((D * correl_matrix * D),annualized_sd_list,annualized_adj_sd_list)
+    return ((D * correl_matrix * D),annualized_sd_list,annualized_sd_list)
 
 def extract_sd_from_cov_matrix(cov_matrix):
     return map(lambda x: math.sqrt(x), np.diag(cov_matrix).tolist())
@@ -290,7 +312,7 @@ def markowitz_sharpe(symbol_list,expected_rtn_list,cov_matrix,max_weight_list,mi
     sol['x'] = map(lambda y: y / sy, y_list)
     return {'result': sol }
 
-def log_optimal_growth(symbol_list,expected_rtn_list,cov_matrix,max_weight_list,industry_groups_list,max_weight_industry,portfolio_change_inertia=None,hatred_for_small_size=None,current_weight_list=None):
+def log_optimal_growth(symbol_list,expected_rtn_list,cov_matrix,max_weight_list,min_exp_rtn,industry_groups_list,max_weight_industry,portfolio_change_inertia=None,hatred_for_small_size=None,current_weight_list=None):
     def iif(cond, iftrue=1.0, iffalse=0.0):
         if cond:
             return iftrue
@@ -324,12 +346,22 @@ def log_optimal_growth(symbol_list,expected_rtn_list,cov_matrix,max_weight_list,
     #  0  0 -1  0 ... 0
     #  0  0  1  0 ... 0
     ###################################################
-    G = cvxopt.matrix([[ (-1.0)**(1+j%2) * iif(i == j/2) for i in range(n) ]
-                for j in range(2*n)
-                ] +
-                map(lambda ig_set: map(lambda s: 1.0 if (s in ig_set) else 0.0, symbol_list), industry_groups_list)
-                ).trans()
-    h = cvxopt.matrix([ max_weight_list[j/2] * iif(j % 2) for j in range(2*n) ] + map(lambda x: max_weight_industry, industry_groups_list))
+    # G = cvxopt.matrix([[ (-1.0)**(1+j%2) * iif(i == j/2) for i in range(n) ]
+    #             for j in range(2*n)
+    #             ] +
+    #             map(lambda ig_set: map(lambda s: 1.0 if (s in ig_set) else 0.0, symbol_list), industry_groups_list)
+    #             ).trans()
+    # h = cvxopt.matrix([ max_weight_list[j/2] * iif(j % 2) for j in range(2*n) ] + map(lambda x: max_weight_industry, industry_groups_list))
+
+    min_exp_rtn_and_max_weight_constraint_list = [ 0.0 if expected_rtn_list[i] < min_exp_rtn else max_weight_list[i] for i in range(n) ]
+
+    Gm = [ [ ((-1.0 if (i==j) else 0.0) - 0.0)                                           for i in range(n) ] for j in range(n) ] +\
+         [ [ (( 1.0 if (i==j) else 0.0) - min_exp_rtn_and_max_weight_constraint_list[j]) for i in range(n) ] for j in range(n) ] +\
+         map(lambda ig_set: map(lambda s: (1.0 if (s in ig_set) else 0.0) - max_weight_industry, symbol_list), industry_groups_list)
+
+    G = cvxopt.matrix(Gm).trans()
+    h = cvxopt.matrix([ 0.0 ] * len(Gm))
+
     ###################################################
 
     # A and b determine the equality constraints defined as A x = b
@@ -918,6 +950,12 @@ def calc_irr_mean_cov_after_20170309_prep(config,prep_data_folder,dt,symbol_list
         #         yearly_val.append((projected_year,projected_val))
         return yearly_val
 
+    ###################################################
+    for f in glob.glob(prep_data_folder+"/*"):
+        # print "os.remove(%s)" % f
+        os.remove(f)
+    ###################################################
+
     curcy_converter = CurrencyConverter(config["currency_rate"])
     ###################################################
     w_a_dict = {}
@@ -1011,7 +1049,7 @@ def calc_irr_mean_cov_after_20170309_prep(config,prep_data_folder,dt,symbol_list
     symbol_with_enough_bps_data_set       = set(filter(lambda x: x is not None, map(lambda x: x[0] if len(x[1]) == NUM_OF_YEARS else None, zip(symbol_list,YM_bps_stndzd_yr_end_list))))
     symbol_with_enough_totliabps_data_set = set(filter(lambda x: x is not None, map(lambda x: x[0] if len(x[1]) == NUM_OF_YEARS else None, zip(symbol_list,YM_totliabps_stndzd_yr_end_list))))
     symbol_with_enough_fundl_set = symbol_with_enough_eps_data_set.intersection(symbol_with_enough_bps_data_set).intersection(symbol_with_enough_totliabps_data_set).intersection(symbol_with_enough_roa_data_set)
-    symbol_with_enough_fundl_list = filter(lambda s: s in symbol_with_enough_fundl_set, symbol_list)
+    symbol_with_enough_fundl_list = sorted(filter(lambda s: s in symbol_with_enough_fundl_set, symbol_list))
 
     if debug_mode:
         print "symbol_with_enough_fundl_list: %s %s" % (dt,symbol_with_enough_fundl_list)
@@ -1114,13 +1152,19 @@ def calc_irr_mean_cov_after_20170309_prep(config,prep_data_folder,dt,symbol_list
             fliq.write('\n')
         fliq.close()
 
-    num_of_jobs = int(mp.cpu_count()*float(config["general"]["percentage_of_cpu_cores_to_use"]))
+    ###################################################
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect(("gmail.com",80))
+    local_ip = (s.getsockname()[0])
+    s.close()
+    num_of_jobs = int(mp.cpu_count()*float(dict(map(lambda x: x.split(':'), config["general"]["percentage_of_cpu_cores_to_use"]))[local_ip]))
+    ###################################################
     Pool(num_of_jobs).map(goingconcern_montecarlo_prep, map(lambda x: (x,int(NUM_OF_MONTE_CARLO/num_of_jobs)), range(num_of_jobs)))
     Pool(num_of_jobs).map(liquidation_montecarlo_prep, map(lambda x: (x,int(NUM_OF_MONTE_CARLO/num_of_jobs)), range(num_of_jobs)))
 
 def calc_irr_mean_cov_after_20170309_live(config,prep_data_folder,dt,symbol_with_enough_fundl_list,hist_unadj_px_dict,debug_mode):
 
-    rtn_tuple = None,None,None
     curcy_converter = CurrencyConverter(config["currency_rate"])
     reporting_curcy_conv_rate_list = map(lambda s: curcy_converter.get_conv_rate_to_hkd(config["reporting_currency"].get(s,config["reporting_currency"]["default"]),dt), symbol_with_enough_fundl_list)
     price_curcy_conv_rate_list = map(lambda s: curcy_converter.get_conv_rate_to_hkd(config["price_currency"].get(s,config["price_currency"]["default"]),dt), symbol_with_enough_fundl_list)
@@ -1181,7 +1225,17 @@ def calc_irr_mean_cov_after_20170309_live(config,prep_data_folder,dt,symbol_with
         fa.close()
         return irr_goingconcern_part_list
 
-    irr_goingconcern_list = Pool(int(mp.cpu_count()*float(config["general"]["percentage_of_cpu_cores_to_use"]))).map(goingconcern_irr_part, zip(extnl_drvr_dvd_rlzn_path_sample_file_list,asset_drvr_dvd_rlzn_path_sample_file_list))
+
+    ###################################################
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect(("gmail.com",80))
+    local_ip = (s.getsockname()[0])
+    s.close()
+    num_of_jobs = int(mp.cpu_count()*float(dict(map(lambda x: x.split(':'), config["general"]["percentage_of_cpu_cores_to_use"]))[local_ip]))
+    ###################################################
+
+    irr_goingconcern_list = Pool(num_of_jobs).map(goingconcern_irr_part, zip(extnl_drvr_dvd_rlzn_path_sample_file_list,asset_drvr_dvd_rlzn_path_sample_file_list))
     irr_goingconcern_sample_list = [j for i in map(lambda x: map(lambda y: y[0], x), irr_goingconcern_list) for j in i]
     irr_extnl_drvr_sample_list = [j for i in map(lambda x: map(lambda y: y[1], x), irr_goingconcern_list) for j in i]
     irr_asset_drvr_sample_list = [j for i in map(lambda x: map(lambda y: y[2], x), irr_goingconcern_list) for j in i]
@@ -1196,16 +1250,12 @@ def calc_irr_mean_cov_after_20170309_live(config,prep_data_folder,dt,symbol_with
         print "irr_goingconcern_corrcoef: %s" % (zip(symbol_with_enough_fundl_list,irr_goingconcern_corrcoef[0]))
     ###################################################
 
-    try:
-        # irr_goingconcern_mean_list = np.mean(np.array(irr_goingconcern_sample_list).T, axis=1).tolist()
-        # irr_extnl_drvr_mean_list = np.mean(np.array(irr_extnl_drvr_sample_list).T, axis=1).tolist()
-        # irr_asset_drvr_mean_list = np.mean(np.array(irr_asset_drvr_sample_list).T, axis=1).tolist()
-        irr_goingconcern_mean_list = np.mean(np.array(irr_goingconcern_sample_list), axis=0).tolist()
-        irr_extnl_drvr_mean_list = np.mean(np.array(irr_extnl_drvr_sample_list), axis=0).tolist()
-        irr_asset_drvr_mean_list = np.mean(np.array(irr_asset_drvr_sample_list), axis=0).tolist()
-    except Exception, e:
-        print "ERROR: 1"
-        return rtn_tuple
+    # irr_goingconcern_mean_list = np.mean(np.array(irr_goingconcern_sample_list).T, axis=1).tolist()
+    # irr_extnl_drvr_mean_list = np.mean(np.array(irr_extnl_drvr_sample_list).T, axis=1).tolist()
+    # irr_asset_drvr_mean_list = np.mean(np.array(irr_asset_drvr_sample_list).T, axis=1).tolist()
+    irr_goingconcern_mean_list = np.mean(np.array(irr_goingconcern_sample_list), axis=0).tolist()
+    irr_extnl_drvr_mean_list = np.mean(np.array(irr_extnl_drvr_sample_list), axis=0).tolist()
+    irr_asset_drvr_mean_list = np.mean(np.array(irr_asset_drvr_sample_list), axis=0).tolist()
 
     ###################################################
     # Monte Carlo (liquidation or M&A)
@@ -1229,7 +1279,7 @@ def calc_irr_mean_cov_after_20170309_live(config,prep_data_folder,dt,symbol_with
         fliq.close()
         return irr_liq_part_list
 
-    irr_liquidation_sample_list = Pool(int(mp.cpu_count()*float(config["general"]["percentage_of_cpu_cores_to_use"]))).map(liquidation_irr_part, liq_drvr_dvd_rlzn_path_sample_file_list)
+    irr_liquidation_sample_list = Pool(num_of_jobs).map(liquidation_irr_part, liq_drvr_dvd_rlzn_path_sample_file_list)
     irr_liquidation_sample_list = [j for i in irr_liquidation_sample_list for j in i]
 
     # if debug_mode:
@@ -1243,12 +1293,8 @@ def calc_irr_mean_cov_after_20170309_live(config,prep_data_folder,dt,symbol_with
         # print "irr_liquidation_corrcoef: %s" % (zip(symbol_with_enough_fundl_list,irr_liquidation_corrcoef[0]))
     ###################################################
 
-    try:
-        # irr_liquidation_mean_list = np.mean(np.array(irr_liquidation_sample_list).T, axis=1).tolist()
-        irr_liquidation_mean_list = np.mean(np.array(irr_liquidation_sample_list), axis=0).tolist()
-    except Exception, e:
-        print "ERROR: 2"
-        return rtn_tuple
+    # irr_liquidation_mean_list = np.mean(np.array(irr_liquidation_sample_list).T, axis=1).tolist()
+    irr_liquidation_mean_list = np.mean(np.array(irr_liquidation_sample_list), axis=0).tolist()
 
     ###################################################
     # Combine the results from various earnings drivers
@@ -1292,8 +1338,7 @@ def calc_irr_mean_cov_after_20170309_live(config,prep_data_folder,dt,symbol_with
         irr_combined_ci_list.append((sorted_sample_list[int(float(n)*0.05)],sorted_sample_list[int(float(n)*0.95)]))
 
     ###################################################
-    rtn_tuple = irr_combined_mean_list,irr_combined_cov_matrix,irr_combined_ci_list
-    return rtn_tuple
+    return irr_combined_mean_list,irr_combined_cov_matrix,irr_combined_ci_list
 
 
 def preprocess_industry_groups(industry_group_dict):
