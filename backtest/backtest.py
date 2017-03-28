@@ -13,7 +13,7 @@ sys.path.append(os.path.dirname(sys.path[0]))
 from qvi import calc_cov_matrix_annualized,intWithCommas,justify_str,markowitz,markowitz_robust,markowitz_sharpe,log_optimal_growth,\
                 read_file,extract_sd_from_cov_matrix,calc_return_list,get_hist_data_key_date,get_hist_data_key_sym,\
                 calc_irr_mean_cov_after_20170309_prep,calc_irr_mean_cov_after_20170309_live,\
-                get_industry_groups,preprocess_industry_groups,get_port_and_hdg_cov_matrix,log_optimal_hedge,sharpe_hedge,minvar_hedge
+                get_industry_groups,preprocess_industry_groups,get_port_and_hdg_cov_matrix,log_optimal_hedge,sharpe_hedge,minvar_hedge,LOOKBACK_DAYS
 
 ###################################################
 AUDIT_DELAY = 3.0
@@ -127,10 +127,10 @@ for dt in rebalance_date_list:
     to_tgt_rtn = max(irr_combined_mean_list)
 
     ###################################################
-    hist_adj_px_list_fil_sorted = sorted(filter(lambda x: x[0] <= dt, hist_adj_px_list_sorted), key=lambda y: y[0])
+    hist_adj_px_list_fil_sorted = sorted(filter(lambda x: (x[0] <= dt) and (x[0] >= dt-timedelta(days=(LOOKBACK_DAYS*3))), hist_adj_px_list_sorted), key=lambda y: y[0])
     sym_time_series_list = map(lambda s: map(lambda ts: (ts[0],ts[2]), filter(lambda x: x[1] == s, hist_adj_px_list_fil_sorted)), symbol_list)
     hedging_sym_time_series_list = map(lambda s: map(lambda ts: (ts[0],ts[2]), filter(lambda h: h[1] == s, hist_adj_px_list_fil_sorted)), hedging_symbol_list)
-    aug_cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(hedging_sym_time_series_list+sym_time_series_list)
+    aug_cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(hedging_sym_time_series_list+sym_time_series_list,debug_mode=False)
 
     cov_matrix = aug_cov_matrix
     for i in range(len(hedging_symbol_list)):

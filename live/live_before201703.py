@@ -97,7 +97,7 @@ time_check = datetime.now()
 print '\n'.join(map(lambda x: justify_str(x[0],5)+": "+justify_str(round(x[1]*100,2),8)+" %", sorted(expected_rtn_dict.items(),key=lambda x: x[1],reverse=True)))
 
 ###################################################
-aug_cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(sym_time_series_list)
+aug_cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(sym_time_series_list,debug_mode=True)
 time_check_printout.append("Calculating covariance matrix: %s" % (datetime.now()-time_check))
 print "Abnormal stdev to check:"
 time_check = datetime.now()

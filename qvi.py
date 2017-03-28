@@ -88,15 +88,9 @@ def intWithCommas(x):
     return "%d%s" % (x, result)
 
 def calc_return_list(price_list):
-    return map(lambda x: (x[0]/x[1])-1.0, zip(price_list[1:], price_list[:-1]))
+    return np.divide(np.array(price_list[1:]),np.array(price_list[:-1]))-np.ones(len(price_list)-1)
 
-def calc_correl(tup):
-    tup = list(tup)
-    if len(tup) == 2:
-        ts_a,ts_b = tup
-    else:
-        ts_a,ts_b,i,j = tup
-
+def calc_correl(ts_a,ts_b):
     common_date_set = set(map(lambda x: x[0], ts_a)).intersection(set(map(lambda x: x[0], ts_b)))
     if len(common_date_set) < 30:
         return 1.0 # conservative
@@ -107,17 +101,13 @@ def calc_correl(tup):
     a_ext = a_ext[-common_len:]
     b_ext = b_ext[-common_len:]
 
-    if i is None or j is None:
-        return round(np.corrcoef(calc_return_list(a_ext),calc_return_list(b_ext))[0][1],5)
-    else:
-        return (round(np.corrcoef(calc_return_list(a_ext),calc_return_list(b_ext))[0][1],5),i,j)
+    return round(np.corrcoef(calc_return_list(a_ext),calc_return_list(b_ext))[0][1],5)
 
 def calc_sd(ts):
     if len(ts) < 30:
         return 9999.9
     else:
-        r_ls = calc_return_list(ts)[-LOOKBACK_DAYS:]
-        return np.std(np.asarray(r_ls))
+        return np.std(calc_return_list(ts[-LOOKBACK_DAYS:]))
 
 def get_annualization_factor(date_list):
     if len(date_list) < 3:
@@ -139,22 +129,43 @@ def get_annualization_factor(date_list):
         else:
             return 1
 
-def calc_cov_matrix_annualized(sym_time_series_list, num_of_jobs=3):
+def calc_cov_matrix_annualized(sym_time_series_list,num_of_jobs=3,debug_mode=False):
     ###################################################
     # correlation matrix
     ###################################################
     N = len(sym_time_series_list)
     # ij_correl_dict = dict((tuple(sorted([idx_i,idx_j])), calc_correl(sym_time_series_list[idx_i],sym_time_series_list[idx_j])) for idx_i in range(len(sym_time_series_list)) for idx_j in range(idx_i,len(sym_time_series_list)) )
-    ij_correl_list = Pool(num_of_jobs).map(calc_correl, [j for i in map(lambda idx_j: map(lambda idx_i: (sym_time_series_list[idx_i],sym_time_series_list[idx_j],idx_i,idx_j), range(N)), range(N)) for j in i])
-    ij_correl_dict = dict((grp, list(it_lstup)[0][0]) for grp, it_lstup in itertools.groupby(sorted(ij_correl_list, key=lambda x: (x[1],x[2])), lambda x: (x[1],x[2])))
+    # ts_list = [j for i in map(lambda idx_j: map(lambda idx_i: (sym_time_series_list[idx_i],sym_time_series_list[idx_j],idx_i,idx_j), range(N)), range(N)) for j in i]
+    ij_correl_dict = {}
 
-    # print "ij_correl_dict: %s" % ij_correl_dict
+    ###################################################
+    def calc_correl_exclusive(idx_i,idx_j):
+        common_date_set = set(map(lambda x: x[0], sym_time_series_list[idx_i])).intersection(set(map(lambda x: x[0], sym_time_series_list[idx_j])))
+        if len(common_date_set) < 30:
+            return 1.0 # conservative
+        a_ext = map(lambda x: x[1], sorted(filter(lambda x: x[0] in common_date_set, sym_time_series_list[idx_i][-(LOOKBACK_DAYS*2):]), key=lambda x: x[0]))
+        b_ext = map(lambda x: x[1], sorted(filter(lambda x: x[0] in common_date_set, sym_time_series_list[idx_j][-(LOOKBACK_DAYS*2):]), key=lambda x: x[0]))
+        common_len = min(min(len(a_ext),len(b_ext)),LOOKBACK_DAYS)
+        a_ext = a_ext[-common_len:]
+        b_ext = b_ext[-common_len:]
+        res = np.corrcoef(calc_return_list(a_ext),calc_return_list(b_ext))[0][1]
+        return round(1.0 if np.isnan(res) or res is None else res,5)
+    ###################################################
+
+    for idx_i in range(N):
+        for idx_j in range(idx_i,N):
+            ij_correl_dict[tuple(sorted([idx_i,idx_j]))] = calc_correl_exclusive(idx_i,idx_j)
+
     correl_matrix = []
-    for idx_i in range(len(sym_time_series_list)):
+    for idx_i in range(N):
         row = []
-        for idx_j in range(len(sym_time_series_list)):
+        for idx_j in range(N):
             row.append(ij_correl_dict[ tuple(sorted([idx_i,idx_j])) ])
         correl_matrix.append(row)
+
+    if debug_mode:
+        print "len(correl_matrix) %s" % len(correl_matrix)
+        print ','.join(map(str, map(lambda x: len(x), correl_matrix)))
 
     correl_matrix = np.asmatrix(correl_matrix)
 
@@ -438,8 +449,8 @@ def calc_expected_return_before_201703(config,dt,symbol_list,hist_bps_dict,hist_
         ###################################################
         if len(bps_list) >= 3 and sym in hist_unadj_px_dict[dt]:
             bps_r = calc_return_list(bps_list)
-            m = sum(bps_r)/len(bps_r)
-            sd = np.std(np.asarray(bps_r))
+            m = np.sum(bps_r)/(bps_r.size)
+            sd = np.std(bps_r)
             conser_bp_ratio = max(reporting_curcy_conv_rate * bps_list[-1] * (1 + min(m,0.0) - float(config["general"]["bp_stdev"]) * sd) / price_curcy_conv_rate / hist_unadj_px_dict[dt][sym], 0.0)
             conser_bp_ratio_list.append(conser_bp_ratio)
             conser_bp_ratio_dict[sym] = conser_bp_ratio
@@ -1159,9 +1170,12 @@ def calc_irr_mean_cov_after_20170309_prep(config,prep_data_folder,dt,symbol_list
     local_ip = (s.getsockname()[0])
     s.close()
     num_of_jobs = int(mp.cpu_count()*float(dict(map(lambda x: x.split(':'), config["general"]["percentage_of_cpu_cores_to_use"]))[local_ip]))
+    num_of_files = NUM_OF_MONTE_CARLO/300
     ###################################################
-    Pool(num_of_jobs).map(goingconcern_montecarlo_prep, map(lambda x: (x,int(NUM_OF_MONTE_CARLO/num_of_jobs)), range(num_of_jobs)))
-    Pool(num_of_jobs).map(liquidation_montecarlo_prep, map(lambda x: (x,int(NUM_OF_MONTE_CARLO/num_of_jobs)), range(num_of_jobs)))
+    with Pool(num_of_jobs) as p:
+        p.map(goingconcern_montecarlo_prep, map(lambda x: (x,int(NUM_OF_MONTE_CARLO/num_of_files)), range(num_of_files)))
+    with Pool(num_of_jobs) as p:
+        p.map(liquidation_montecarlo_prep, map(lambda x: (x,int(NUM_OF_MONTE_CARLO/num_of_files)), range(num_of_files)))
 
 def calc_irr_mean_cov_after_20170309_live(config,prep_data_folder,dt,symbol_with_enough_fundl_list,hist_unadj_px_dict,debug_mode):
 
@@ -1235,10 +1249,24 @@ def calc_irr_mean_cov_after_20170309_live(config,prep_data_folder,dt,symbol_with
     num_of_jobs = int(mp.cpu_count()*float(dict(map(lambda x: x.split(':'), config["general"]["percentage_of_cpu_cores_to_use"]))[local_ip]))
     ###################################################
 
-    irr_goingconcern_list = Pool(num_of_jobs).map(goingconcern_irr_part, zip(extnl_drvr_dvd_rlzn_path_sample_file_list,asset_drvr_dvd_rlzn_path_sample_file_list))
-    irr_goingconcern_sample_list = [j for i in map(lambda x: map(lambda y: y[0], x), irr_goingconcern_list) for j in i]
-    irr_extnl_drvr_sample_list = [j for i in map(lambda x: map(lambda y: y[1], x), irr_goingconcern_list) for j in i]
-    irr_asset_drvr_sample_list = [j for i in map(lambda x: map(lambda y: y[2], x), irr_goingconcern_list) for j in i]
+    # dvd_rlzn_sample_file_list = zip(extnl_drvr_dvd_rlzn_path_sample_file_list,asset_drvr_dvd_rlzn_path_sample_file_list)
+    # irr_goingconcern_list = []
+    # while len(dvd_rlzn_sample_file_list) > 0:
+    #     ele = num_of_jobs*2
+    #     with Pool(num_of_jobs) as p:
+    #         p_list = p.map(goingconcern_irr_part, dvd_rlzn_sample_file_list[:ele])
+    #         irr_goingconcern_list.extend(p_list)
+    #         dvd_rlzn_sample_file_list = dvd_rlzn_sample_file_list[ele:]
+    # irr_goingconcern_sample_list = [j for i in map(lambda x: map(lambda y: y[0], x), irr_goingconcern_list) for j in i]
+    # irr_extnl_drvr_sample_list = [j for i in map(lambda x: map(lambda y: y[1], x), irr_goingconcern_list) for j in i]
+    # irr_asset_drvr_sample_list = [j for i in map(lambda x: map(lambda y: y[2], x), irr_goingconcern_list) for j in i]
+
+    with Pool(num_of_jobs) as p:
+        irr_goingconcern_list = [j for i in p.map(goingconcern_irr_part, zip(extnl_drvr_dvd_rlzn_path_sample_file_list,asset_drvr_dvd_rlzn_path_sample_file_list)) for j in i]
+    irr_goingconcern_sample_list = map(lambda x: x[0], irr_goingconcern_list)
+    irr_extnl_drvr_sample_list = map(lambda x: x[1], irr_goingconcern_list)
+    irr_asset_drvr_sample_list = map(lambda x: x[2], irr_goingconcern_list)
+
 
     # print irr_goingconcern_sample_list
 
@@ -1279,8 +1307,20 @@ def calc_irr_mean_cov_after_20170309_live(config,prep_data_folder,dt,symbol_with
         fliq.close()
         return irr_liq_part_list
 
-    irr_liquidation_sample_list = Pool(num_of_jobs).map(liquidation_irr_part, liq_drvr_dvd_rlzn_path_sample_file_list)
-    irr_liquidation_sample_list = [j for i in irr_liquidation_sample_list for j in i]
+
+    # dvd_rlzn_sample_file_list = liq_drvr_dvd_rlzn_path_sample_file_list
+    # irr_liquidation_sample_list = []
+    # while len(dvd_rlzn_sample_file_list) > 0:
+    #     ele = num_of_jobs*2
+    #     with Pool(num_of_jobs) as p:
+    #         p_list = p.map(liquidation_irr_part, dvd_rlzn_sample_file_list[:ele])
+    #         irr_liquidation_sample_list.extend(p_list)
+    #         dvd_rlzn_sample_file_list = dvd_rlzn_sample_file_list[ele:]
+    # irr_liquidation_sample_list = [j for i in irr_liquidation_sample_list for j in i]
+
+    with Pool(num_of_jobs) as p:
+        irr_liquidation_sample_list = [j for i in p.map(liquidation_irr_part, liq_drvr_dvd_rlzn_path_sample_file_list) for j in i]
+
 
     # if debug_mode:
     #     print "irr_liquidation_sample_list: %s" % irr_liquidation_sample_list

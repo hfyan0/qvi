@@ -14,7 +14,7 @@ from qvi import CurrencyConverter,calc_cov_matrix_annualized,intWithCommas,justi
                 markowitz_sharpe,log_optimal_growth,read_file,read_file_mul,\
                 calc_expected_return_before_201703,\
                 calc_irr_mean_cov_after_20170309_prep,\
-                get_hist_data_key_sym,get_industry_groups,preprocess_industry_groups
+                get_hist_data_key_sym,get_industry_groups,preprocess_industry_groups,LOOKBACK_DAYS
 
 ###################################################
 config = ConfigObj('config.ini')
@@ -28,6 +28,7 @@ local_ip = (s.getsockname()[0])
 s.close()
 prep_data_folder = dict(map(lambda x: x.split(':'), config["general"]["prep_data_folder"]))[local_ip]
 num_of_jobs = int(mp.cpu_count()*float(dict(map(lambda x: x.split(':'), config_common["general"]["percentage_of_cpu_cores_to_use"]))[local_ip]))
+print "num_of_jobs: %s" % num_of_jobs
 ###################################################
 
 print "Start reading data... %s" % (datetime.now())
@@ -46,7 +47,7 @@ print "Finished reading symbol day bar... %s" % (datetime.now())
 
 print "Start processing symbol day bar... %s" % (datetime.now())
 sym_data_list = map(lambda x: filter(lambda y: len(y) > 5, x), sym_data_list)
-sym_time_series_list = map(lambda data_list: map(lambda csv_fields: (datetime.strptime(csv_fields[0],"%Y-%m-%d"),float(csv_fields[5])), data_list), sym_data_list)
+sym_time_series_list = map(lambda data_list: map(lambda csv_fields: (datetime.strptime(csv_fields[0],"%Y-%m-%d"),float(csv_fields[5])), data_list[-(LOOKBACK_DAYS*3):]), sym_data_list)
 insufficient_data_list = map(lambda ss: ss[0]+": "+str(len(ss[1])), filter(lambda x: len(x[1])<50, zip(hedging_symbol_list+symbol_list,sym_time_series_list)))
 if len(insufficient_data_list) > 0:
     print "Insufficient data:"
@@ -54,7 +55,7 @@ if len(insufficient_data_list) > 0:
 print "Finished processing symbol day bar... %s" % (datetime.now())
 
 print "Start calculating cov matrix... %s" % (datetime.now())
-aug_cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(sym_time_series_list, num_of_jobs)
+aug_cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(sym_time_series_list,num_of_jobs,debug_mode=True)
 print "Abnormal stdev to check:"
 print '\n'.join(map(lambda ss: ": ".join(map(str, ss)) + " %", filter(lambda x: (x[1] > 50.0) or (x[1] < 10.0), zip(hedging_symbol_list+symbol_list,map(lambda x: round(x*100.0,2), annualized_sd_list)))))
 cov_matrix = aug_cov_matrix

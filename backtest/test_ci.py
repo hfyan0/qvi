@@ -60,7 +60,7 @@ for dt in rebalance_date_list:
         continue
     hist_adj_px_list_fil_sorted = sorted(filter(lambda x: x[0] <= dt, hist_adj_px_list_sorted), key=lambda y: y[0])
     sym_time_series_list = map(lambda s: map(lambda ts: (ts[0],ts[2]), filter(lambda x: x[1] == s, hist_adj_px_list_fil_sorted)), symbol_list)
-    cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(sym_time_series_list)
+    cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(sym_time_series_list,debug_mode=True)
 
     # irr_mean_ci_tuple_list = map(lambda s: calc_irr_mean_ci_before_20170309(config_common,dt,s[1],math.sqrt(cov_matrix[s[0]][s[0]]),hist_unadj_px_dict,hist_eps_dict,hist_bps_dict,int(config["general"]["confidence_level"]),AUDIT_DELAY,False), enumerate(symbol_list))
     symbol_with_enough_data_list,irr_combined_mean_list,irr_combined_cov_list,irr_combined_ci_list = calc_irr_mean_cov_after_20170309(config_common,dt,symbol_list,hist_bps_dict,hist_unadj_px_dict,hist_totliabps_dict,hist_eps_dict,hist_roa_dict,10000,AUDIT_DELAY,False)
