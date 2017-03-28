@@ -31,7 +31,7 @@ s.close()
 prep_data_folder = dict(map(lambda x: x.split(':'), config["general"]["prep_data_folder"]))[local_ip]
 ###################################################
 
-print "Start reading data..."
+print "Start reading data... %s" % (datetime.now())
 symbol_list = sorted([ i for k in map(lambda x: config["general"][x] if isinstance(config["general"][x], (list, tuple)) else [config["general"][x]], filter(lambda x: "traded_symbols" in x, config["general"].keys())) for i in k ])
 hedging_symbol_list = config["general"]["hedging_symbols"]
 
@@ -48,10 +48,13 @@ ind_grp_list_1 = preprocess_industry_groups(config_common["industry_group"])
 industry_groups_dict = dict(ind_grp_list_1)
 industry_groups_list = get_industry_groups(ind_grp_list_1)
 # print '\n'.join(map(lambda x: ':'.join(map(str, x)), industry_groups_dict.items()))
+print "Finished reading data... %s" % (datetime.now())
 
 
 
+print "Start calculating IRR... %s" % (datetime.now())
 irr_combined_mean_list,irr_combined_cov_list,irr_combined_ci_list = calc_irr_mean_cov_after_20170309_live(config_common,prep_data_folder,datetime.now().date(),symbol_with_enough_fundl_list,hist_unadj_px_dict,True)
+print "Finished calculating IRR... %s" % (datetime.now())
 
 if any(map(lambda x: x is None, [symbol_with_enough_fundl_list,irr_combined_mean_list,irr_combined_cov_list,irr_combined_ci_list])):
     print "Problem calculating IRR. Exiting..."

@@ -12,7 +12,7 @@ import os
 sys.path.append(os.path.dirname(sys.path[0]))
 from qvi import calc_cov_matrix_annualized,intWithCommas,justify_str,markowitz,markowitz_robust,markowitz_sharpe,log_optimal_growth,\
                 read_file,extract_sd_from_cov_matrix,calc_return_list,get_hist_data_key_date,get_hist_data_key_sym,\
-                calc_irr_mean_cov_after_20170309_prep,calc_irr_mean_cov_after_20170309_live,\
+                remove_files_in_folder,calc_irr_mean_cov_after_20170309_prep,calc_irr_mean_cov_after_20170309_live,\
                 get_industry_groups,preprocess_industry_groups,get_port_and_hdg_cov_matrix,log_optimal_hedge,sharpe_hedge,minvar_hedge,LOOKBACK_DAYS
 
 ###################################################
@@ -104,6 +104,7 @@ for dt in rebalance_date_list:
     if len(symbol_list) < min_no_of_avb_sym:
         continue
 
+    remove_files_in_folder(prep_data_folder)
     calc_irr_mean_cov_after_20170309_prep(config_common,prep_data_folder,dt,symbol_list,hist_bps_dict,hist_totliabps_dict,hist_eps_dict,hist_roa_dict,int(config["general"]["monte_carlo_num_of_times"]),int(config["general"]["num_of_fut_divd_periods"]),AUDIT_DELAY,False)
 
     with open(prep_data_folder+"/symbol_with_enough_fundl.pkl", "rb") as symbol_with_enough_fundl_file:

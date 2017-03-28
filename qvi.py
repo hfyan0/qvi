@@ -87,6 +87,68 @@ def intWithCommas(x):
         result = ",%03d%s" % (r, result)
     return "%d%s" % (x, result)
 
+###################################################
+# From https://github.com/better/irr
+###################################################
+MAX_LOG_RATE = 1e3
+BASE_TOL = 1e-12
+
+def irr_binary_search(stream, tol=BASE_TOL):
+    rate_lo, rate_hi = -MAX_LOG_RATE, +MAX_LOG_RATE
+    sgn = np.sign(stream[0]) # f(x) is decreasing
+    for steps in range(100):
+        rate = (rate_lo + rate_hi)/2
+        r = np.arange(len(stream))
+        # Factor exp(m) out because it doesn't affect the sign
+        m = max(-rate * r)
+        f = np.exp(-rate * r - m)
+        t = np.dot(f, stream)
+        if abs(t) < tol * math.exp(-m):
+            break
+        if t * sgn > 0:
+            rate_hi = rate
+        else:
+            rate_lo = rate
+    rate = (rate_lo + rate_hi) / 2
+    return math.exp(rate) - 1
+
+
+def irr_newton(stream, tol=BASE_TOL):
+    rate = 0.0
+    for steps in range(50):
+        r = np.arange(len(stream))
+        # Factor exp(m) out of the numerator & denominator for numerical stability
+        m = max(-rate * r)
+        f = np.exp(-rate * r - m)
+        t = np.dot(f, stream)
+        if abs(t) < tol * math.exp(-m):
+            break
+        u = np.dot(f * r, stream)
+        # Clip the update to avoid jumping into some numerically unstable place
+        rate = rate + np.clip(t / u, -1.0, 1.0)
+
+    return math.exp(rate) - 1
+
+
+def irr_vec(cfs):
+    # Create companion matrix for every row in `cfs`
+    M, N = cfs.shape
+    A = np.zeros((M, (N-1)**2))
+    A[:,N-1::N] = 1
+    A = A.reshape((M,N-1,N-1))
+    A[:,0,:] = cfs[:,-2::-1] / -cfs[:,-1:]  # slice [-1:] to keep dims
+
+    # Calculate roots; `eigvals` is a gufunc
+    res = np.linalg.eigvals(A)
+
+    # Find the solution that makes the most sense...
+    mask = (res.imag == 0) & (res.real > 0)
+    res = np.ma.array(res.real, mask=~mask, fill_value=np.nan)
+    rate = 1.0/res - 1
+    idx = np.argmin(np.abs(rate), axis=1)
+    irr = rate[np.arange(M), idx].filled()
+    return irr
+
 def calc_return_list(price_list):
     return np.divide(np.array(price_list[1:]),np.array(price_list[:-1]))-np.ones(len(price_list)-1)
 
@@ -912,6 +974,12 @@ def calc_irr_mean_ci_before_20170309(config,dt,symbol,ann_sd_sym_rtn,hist_unadj_
 
     return irr_mean_ci_tuple
 
+def remove_files_in_folder(prep_data_folder):
+    for f in glob.glob(prep_data_folder+"/*"):
+        # print "os.remove(%s)" % f
+        os.remove(f)
+
+
 def calc_irr_mean_cov_after_20170309_prep(config,prep_data_folder,dt,symbol_list,hist_bps_dict,hist_totliabps_dict,hist_eps_dict,hist_roa_dict,NUM_OF_MONTE_CARLO,num_of_fut_divd_periods,delay_months,debug_mode):
     def replace_date_with_YM(date_value_list):
         return map(lambda x: ((x[0].year,x[0].month),x[1]), date_value_list)
@@ -960,12 +1028,6 @@ def calc_irr_mean_cov_after_20170309_prep(config,prep_data_folder,dt,symbol_list
         #         projected_year = (yearly_val[-1][0])+1
         #         yearly_val.append((projected_year,projected_val))
         return yearly_val
-
-    ###################################################
-    for f in glob.glob(prep_data_folder+"/*"):
-        # print "os.remove(%s)" % f
-        os.remove(f)
-    ###################################################
 
     curcy_converter = CurrencyConverter(config["currency_rate"])
     ###################################################
@@ -1170,7 +1232,7 @@ def calc_irr_mean_cov_after_20170309_prep(config,prep_data_folder,dt,symbol_list
     local_ip = (s.getsockname()[0])
     s.close()
     num_of_jobs = int(mp.cpu_count()*float(dict(map(lambda x: x.split(':'), config["general"]["percentage_of_cpu_cores_to_use"]))[local_ip]))
-    num_of_files = NUM_OF_MONTE_CARLO/300
+    num_of_files = NUM_OF_MONTE_CARLO/500
     ###################################################
     with Pool(num_of_jobs) as p:
         p.map(goingconcern_montecarlo_prep, map(lambda x: (x,int(NUM_OF_MONTE_CARLO/num_of_files)), range(num_of_files)))
@@ -1224,10 +1286,14 @@ def calc_irr_mean_cov_after_20170309_live(config,prep_data_folder,dt,symbol_with
             # print "len sym_hist_unadj_px_list: %s" % len(sym_hist_unadj_px_list)
             # print "len extnl_drvr_dvd_rlzn_path_list: %s" % len(extnl_drvr_dvd_rlzn_path_list)
             # print datetime.now()
-            sym_irr_extnl_drvr_list = map(lambda x: np.irr([-x[0]] + x[1]) if (x[0] > 0.001 and len(x[1]) > 0 and any(map(lambda x: x > 0, x[1]))) else -1.0, zip(sym_hist_unadj_px_list,extnl_drvr_dvd_rlzn_path_list))
+            # sym_irr_extnl_drvr_list = map(lambda x: np.irr([-x[0]] + x[1]) if (x[0] > 0.001 and len(x[1]) > 0) else -1.0, zip(sym_hist_unadj_px_list,extnl_drvr_dvd_rlzn_path_list))
+            # sym_irr_extnl_drvr_list = map(lambda x: np.irr([-x[0]] + x[1]), zip(sym_hist_unadj_px_list,extnl_drvr_dvd_rlzn_path_list))
+            sym_irr_extnl_drvr_list = map(lambda x: irr_newton([-x[0]] + x[1]), zip(sym_hist_unadj_px_list,extnl_drvr_dvd_rlzn_path_list))
             sym_irr_extnl_drvr_list = map(lambda x: -1.0 if math.isnan(x) else x, sym_irr_extnl_drvr_list)
 
-            sym_irr_asset_drvr_list = map(lambda x: np.irr([-x[0]] + x[1]) if (x[0] > 0.001 and len(x[1]) > 0 and any(map(lambda x: x > 0, x[1]))) else -1.0, zip(sym_hist_unadj_px_list,asset_drvr_dvd_rlzn_path_list))
+            # sym_irr_asset_drvr_list = map(lambda x: np.irr([-x[0]] + x[1]) if (x[0] > 0.001 and len(x[1]) > 0) else -1.0, zip(sym_hist_unadj_px_list,asset_drvr_dvd_rlzn_path_list))
+            # sym_irr_asset_drvr_list = map(lambda x: np.irr([-x[0]] + x[1]), zip(sym_hist_unadj_px_list,asset_drvr_dvd_rlzn_path_list))
+            sym_irr_asset_drvr_list = map(lambda x: irr_newton([-x[0]] + x[1]), zip(sym_hist_unadj_px_list,asset_drvr_dvd_rlzn_path_list))
             sym_irr_asset_drvr_list = map(lambda x: -1.0 if math.isnan(x) else x, sym_irr_asset_drvr_list)
 
             ###################################################
@@ -1261,11 +1327,15 @@ def calc_irr_mean_cov_after_20170309_live(config,prep_data_folder,dt,symbol_with
     # irr_extnl_drvr_sample_list = [j for i in map(lambda x: map(lambda y: y[1], x), irr_goingconcern_list) for j in i]
     # irr_asset_drvr_sample_list = [j for i in map(lambda x: map(lambda y: y[2], x), irr_goingconcern_list) for j in i]
 
+    if debug_mode:
+        print "Start calculating going concern IRR... %s" % (datetime.now())
     with Pool(num_of_jobs) as p:
         irr_goingconcern_list = [j for i in p.map(goingconcern_irr_part, zip(extnl_drvr_dvd_rlzn_path_sample_file_list,asset_drvr_dvd_rlzn_path_sample_file_list)) for j in i]
     irr_goingconcern_sample_list = map(lambda x: x[0], irr_goingconcern_list)
     irr_extnl_drvr_sample_list = map(lambda x: x[1], irr_goingconcern_list)
     irr_asset_drvr_sample_list = map(lambda x: x[2], irr_goingconcern_list)
+    if debug_mode:
+        print "Finished calculating going concern IRR... %s" % (datetime.now())
 
 
     # print irr_goingconcern_sample_list
@@ -1300,7 +1370,9 @@ def calc_irr_mean_cov_after_20170309_live(config,prep_data_folder,dt,symbol_with
             if not fliq_line:
                 break
             liq_drvr_dvd_rlzn_path_list = map(lambda x: map(lambda x: float(x), x.split(',')), fliq_line.split('|'))
-            sym_irr_liq_drvr_list = map(lambda x: np.irr([-x[0]] + x[1]) if (x[0] > 0.001 and len(x[1]) > 0 and any(map(lambda x: x > 0, x[1]))) else -1.0, zip(sym_hist_unadj_px_list,liq_drvr_dvd_rlzn_path_list))
+            # sym_irr_liq_drvr_list = map(lambda x: np.irr([-x[0]] + x[1]) if (x[0] > 0.001 and len(x[1]) > 0) else -1.0, zip(sym_hist_unadj_px_list,liq_drvr_dvd_rlzn_path_list))
+            # sym_irr_liq_drvr_list = map(lambda x: np.irr([-x[0]] + x[1]), zip(sym_hist_unadj_px_list,liq_drvr_dvd_rlzn_path_list))
+            sym_irr_liq_drvr_list = map(lambda x: math.exp(math.log(x[1][-1]/x[0])/len(x[1]))-1.0 if (x[1][-1] > 0.001 and x[0] > 0.001) else -1.0, zip(sym_hist_unadj_px_list,liq_drvr_dvd_rlzn_path_list))
             sym_irr_liq_drvr_list = map(lambda x: -1.0 if math.isnan(x) else x, sym_irr_liq_drvr_list)
             irr_liq_part_list.append(sym_irr_liq_drvr_list)
 
@@ -1318,8 +1390,12 @@ def calc_irr_mean_cov_after_20170309_live(config,prep_data_folder,dt,symbol_with
     #         dvd_rlzn_sample_file_list = dvd_rlzn_sample_file_list[ele:]
     # irr_liquidation_sample_list = [j for i in irr_liquidation_sample_list for j in i]
 
+    if debug_mode:
+        print "Start calculating liquidation IRR... %s" % (datetime.now())
     with Pool(num_of_jobs) as p:
         irr_liquidation_sample_list = [j for i in p.map(liquidation_irr_part, liq_drvr_dvd_rlzn_path_sample_file_list) for j in i]
+    if debug_mode:
+        print "Finished calculating liquidation IRR... %s" % (datetime.now())
 
 
     # if debug_mode:

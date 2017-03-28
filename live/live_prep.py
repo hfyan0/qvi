@@ -12,8 +12,7 @@ import os
 sys.path.append(os.path.dirname(sys.path[0]))
 from qvi import CurrencyConverter,calc_cov_matrix_annualized,intWithCommas,justify_str,\
                 markowitz_sharpe,log_optimal_growth,read_file,read_file_mul,\
-                calc_expected_return_before_201703,\
-                calc_irr_mean_cov_after_20170309_prep,\
+                remove_files_in_folder,calc_expected_return_before_201703,calc_irr_mean_cov_after_20170309_prep,\
                 get_hist_data_key_sym,get_industry_groups,preprocess_industry_groups,LOOKBACK_DAYS
 
 ###################################################
@@ -30,6 +29,12 @@ prep_data_folder = dict(map(lambda x: x.split(':'), config["general"]["prep_data
 num_of_jobs = int(mp.cpu_count()*float(dict(map(lambda x: x.split(':'), config_common["general"]["percentage_of_cpu_cores_to_use"]))[local_ip]))
 print "num_of_jobs: %s" % num_of_jobs
 ###################################################
+
+
+
+remove_files_in_folder(prep_data_folder)
+print "Removed files in %s... %s" % (prep_data_folder,datetime.now())
+
 
 print "Start reading data... %s" % (datetime.now())
 symbol_list = sorted([ i for k in map(lambda x: config["general"][x] if isinstance(config["general"][x], (list, tuple)) else [config["general"][x]], filter(lambda x: "traded_symbols" in x, config["general"].keys())) for i in k ])
@@ -64,9 +69,9 @@ for i in range(len(hedging_symbol_list)):
     cov_matrix = np.delete(cov_matrix, 0, 1)
 print "Finished calculating cov matrix... %s" % (datetime.now())
 
-with open(prep_data_folder+"/aug_cov_matrix.pkl", "w+") as aug_cov_matrix_file:
+with open(prep_data_folder+"/aug_cov_matrix.pkl", "wb") as aug_cov_matrix_file:
     cPickle.dump(aug_cov_matrix,aug_cov_matrix_file)
-with open(prep_data_folder+"/cov_matrix.pkl", "w+") as cov_matrix_file:
+with open(prep_data_folder+"/cov_matrix.pkl", "wb") as cov_matrix_file:
     cPickle.dump(cov_matrix,cov_matrix_file)
 
 
@@ -77,13 +82,13 @@ hist_eps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_eps"])
 hist_roa_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_roa"])
 hist_totliabps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_totliabps"])
 
-with open(prep_data_folder+"/hist_bps_dict.pkl", "w+") as hist_bps_dict_file:
+with open(prep_data_folder+"/hist_bps_dict.pkl", "wb") as hist_bps_dict_file:
     cPickle.dump(hist_bps_dict,hist_bps_dict_file)
-with open(prep_data_folder+"/hist_eps_dict.pkl", "w+") as hist_eps_dict_file:
+with open(prep_data_folder+"/hist_eps_dict.pkl", "wb") as hist_eps_dict_file:
     cPickle.dump(hist_eps_dict,hist_eps_dict_file)
-with open(prep_data_folder+"/hist_roa_dict.pkl", "w+") as hist_roa_dict_file:
+with open(prep_data_folder+"/hist_roa_dict.pkl", "wb") as hist_roa_dict_file:
     cPickle.dump(hist_roa_dict,hist_roa_dict_file)
-with open(prep_data_folder+"/hist_totliabps_dict.pkl", "w+") as hist_totliabps_dict_file:
+with open(prep_data_folder+"/hist_totliabps_dict.pkl", "wb") as hist_totliabps_dict_file:
     cPickle.dump(hist_totliabps_dict,hist_totliabps_dict_file)
 print "Finished reading fundamental data... %s" % (datetime.now())
 
