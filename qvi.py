@@ -352,7 +352,6 @@ def markowitz_sharpe(symbol_list,expected_rtn_list,cov_matrix,max_weight_list,mi
     # G x <= h
     ###################################################
     min_exp_rtn_and_max_weight_constraint_list = [ 0.0 if expected_rtn_list[i] < min_exp_rtn else max_weight_list[i] for i in range(n) ]
-    max_industry_weight_constraint_list = map(lambda x: max_weight_industry, industry_groups_list)
 
     Gm = [ [ ((-1.0 if (i==j) else 0.0) - 0.0)                                           for i in range(n) ] for j in range(n) ] +\
          [ [ (( 1.0 if (i==j) else 0.0) - min_exp_rtn_and_max_weight_constraint_list[j]) for i in range(n) ] for j in range(n) ] +\
@@ -1432,19 +1431,14 @@ def calc_irr_mean_cov_after_20170309_live(config,prep_data_folder,dt,symbol_with
     ###################################################
     # output IRR
     ###################################################
-    if debug_mode:
-        k_sample_file = open(prep_data_folder+"/k_samples_combined.csv", "w")
+    with open(prep_data_folder+"/k_samples_combined.csv", "w") as k_sample_file:
         k_sample_file.write('\n'.join(map(lambda x: x[0]+':'+','.join(map(str,x[1])), zip(symbol_with_enough_fundl_list,irr_combined_sample_list))))
-        k_sample_file.close()
-        k_sample_file = open(prep_data_folder+"/k_samples_extnl_drvr.csv", "w")
+    with open(prep_data_folder+"/k_samples_extnl_drvr.csv", "w") as k_sample_file:
         k_sample_file.write('\n'.join(map(lambda x: x[0]+':'+','.join(map(str,x[1])), zip(symbol_with_enough_fundl_list,irr_extnl_drvr_sample_list))))
-        k_sample_file.close()
-        k_sample_file = open(prep_data_folder+"/k_samples_asset_drvr.csv", "w")
+    with open(prep_data_folder+"/k_samples_asset_drvr.csv", "w") as k_sample_file:
         k_sample_file.write('\n'.join(map(lambda x: x[0]+':'+','.join(map(str,x[1])), zip(symbol_with_enough_fundl_list,irr_asset_drvr_sample_list))))
-        k_sample_file.close()
-        k_sample_file = open(prep_data_folder+"/k_samples_liquidation.csv", "w")
+    with open(prep_data_folder+"/k_samples_liquidation.csv", "w") as k_sample_file:
         k_sample_file.write('\n'.join(map(lambda x: x[0]+':'+','.join(map(str,x[1])), zip(symbol_with_enough_fundl_list,irr_liquidation_sample_list))))
-        k_sample_file.close()
     ###################################################
 
     irr_combined_ci_list = []

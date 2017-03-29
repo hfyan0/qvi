@@ -39,7 +39,7 @@ hedging_symbol_list = config["general"]["hedging_symbols"]
 with open(prep_data_folder+"/symbol_with_enough_fundl.pkl", "rb") as symbol_with_enough_fundl_file:
     symbol_with_enough_fundl_list = cPickle.load(symbol_with_enough_fundl_file)
 
-cur_px_dict = dict(map(lambda x: (x[0],float(x[1])), read_file(config["general"]["current_prices"])))
+cur_px_dict = dict(map(lambda x: (x[0],float(x[1])) if len(x)==2 else (x[1],float(x[2])), read_file(config["general"]["current_prices"])))
 hist_unadj_px_dict = {}
 hist_unadj_px_dict[datetime.now().date()] = cur_px_dict
 
@@ -53,20 +53,25 @@ print "Finished reading data... %s" % (datetime.now())
 
 
 print "Start calculating IRR... %s" % (datetime.now())
-irr_combined_mean_list,irr_combined_cov_list,irr_combined_ci_list = calc_irr_mean_cov_after_20170309_live(config_common,prep_data_folder,datetime.now().date(),symbol_with_enough_fundl_list,hist_unadj_px_dict,True)
+sml_irr_combined_mean_list,sml_irr_combined_cov_list,_ = calc_irr_mean_cov_after_20170309_live(config_common,prep_data_folder,datetime.now().date(),symbol_with_enough_fundl_list,hist_unadj_px_dict,True)
 print "Finished calculating IRR... %s" % (datetime.now())
 
-if any(map(lambda x: x is None, [symbol_with_enough_fundl_list,irr_combined_mean_list,irr_combined_cov_list,irr_combined_ci_list])):
+if any(map(lambda x: x is None, [symbol_with_enough_fundl_list,sml_irr_combined_mean_list,sml_irr_combined_cov_list])):
     print "Problem calculating IRR. Exiting..."
     sys.exit(0)
 
-irr_combined_mean_dict = dict(zip(symbol_with_enough_fundl_list,irr_combined_mean_list))
-# print irr_combined_mean_dict
-print
-print "irr_combined_cov_list:"
-print len(irr_combined_cov_list)
-print len(irr_combined_cov_list[0])
-irr_combined_cov_matrix = np.asmatrix(irr_combined_cov_list)
+###################################################
+# re-arrange to match symbol_list
+###################################################
+irr_combined_mean_dict = dict(zip(symbol_with_enough_fundl_list,sml_irr_combined_mean_list))
+irr_combined_mean_list = map(lambda s: irr_combined_mean_dict.get(s,-1.0), symbol_list)
+sml_irr_combined_cov_matrix = np.asmatrix(sml_irr_combined_cov_list)
+###################################################
+
+
+
+
+
 
 
 with open(prep_data_folder+"/aug_cov_matrix.pkl", "r") as aug_cov_matrix_file:
@@ -123,13 +128,11 @@ if len(current_pos_list) > 0:
     current_mkt_val_dict = dict(map(lambda x: (x[0],curcy_converter.conv_to_hkd(x[1],datetime.now().date(),cur_px_dict[x[0]]*float(x[2]))), current_pos_list))
     current_weight_dict = dict(map(lambda s: (s,current_mkt_val_dict[s]/sum(current_mkt_val_dict.values())), current_mkt_val_dict.keys()))
     current_weight_list = map(lambda s: current_weight_dict.get(s,0.0), symbol_list)
-
-    cur_pos_vec = np.asarray(current_weight_list)
-    cur_pos_vec_T = np.matrix(cur_pos_vec).T
+    sml_current_weight_list = map(lambda s: current_weight_dict.get(s,0.0), symbol_with_enough_fundl_list)
 ###################################################
 
 max_weight_dict = config["max_weight"]
-max_weight_list = map(lambda x: float(max_weight_dict.get(x,max_weight_dict["single_name"])), symbol_list)
+max_weight_list = map(lambda x: float(max_weight_dict.get(x,max_weight_dict["single_name"])), symbol_with_enough_fundl_list)
 
 N = int(config["general"]["granularity"])
 
@@ -139,7 +142,7 @@ time_check = datetime.now()
 ###################################################
 markowitz_max_sharpe_sol_list = []
 if float(config["general"]["markowitz_max_sharpe_weight"] > 0.0):
-    tmp_sol_list = markowitz_sharpe(symbol_with_enough_fundl_list, irr_combined_mean_list, irr_combined_cov_matrix, max_weight_list, float(config["general"]["min_expected_return"]), industry_groups_list, float(config["max_weight"]["industry"]), float(config["general"]["portfolio_change_inertia"]), float(config["general"]["hatred_for_small_size"]), current_weight_list)
+    tmp_sol_list = markowitz_sharpe(symbol_with_enough_fundl_list, sml_irr_combined_mean_list, sml_irr_combined_cov_matrix, max_weight_list, float(config["general"]["min_expected_return"]), industry_groups_list, float(config["max_weight"]["industry"]), float(config["general"]["portfolio_change_inertia"]), float(config["general"]["hatred_for_small_size"]), current_weight_list)
     if tmp_sol_list is None:
         print "Failed to find solution."
         sys.exit(0)
@@ -149,7 +152,7 @@ if float(config["general"]["markowitz_max_sharpe_weight"] > 0.0):
 ###################################################
 log_optimal_sol_list = []
 if float(config["general"]["log_optimal_growth_weight"]) > 0.0:
-    tmp_sol_list = log_optimal_growth(symbol_with_enough_fundl_list, irr_combined_mean_list, irr_combined_cov_matrix, max_weight_list, float(config["general"]["min_expected_return"]), industry_groups_list, float(config["max_weight"]["industry"]), float(config["general"]["portfolio_change_inertia"]), float(config["general"]["hatred_for_small_size"]), current_weight_list)
+    tmp_sol_list = log_optimal_growth(symbol_with_enough_fundl_list, sml_irr_combined_mean_list, sml_irr_combined_cov_matrix, max_weight_list, float(config["general"]["min_expected_return"]), industry_groups_list, float(config["max_weight"]["industry"]), float(config["general"]["portfolio_change_inertia"]), float(config["general"]["hatred_for_small_size"]), current_weight_list)
     if tmp_sol_list is None:
         print "Failed to find solution."
         sys.exit(0)
@@ -157,7 +160,7 @@ if float(config["general"]["log_optimal_growth_weight"]) > 0.0:
 ###################################################
 
 ###################################################
-sol_list = len(symbol_list) * [0.0]
+sol_list = len(symbol_with_enough_fundl_list) * [0.0]
 if float(config["general"]["log_optimal_growth_weight"]) > 0.0:
     sol_list = map(sum, zip(sol_list,map(lambda x: x * float(config["general"]["log_optimal_growth_weight"]), log_optimal_sol_list)))
 if float(config["general"]["markowitz_max_sharpe_weight"]) > 0.0:
@@ -166,11 +169,11 @@ if float(config["general"]["markowitz_max_sharpe_weight"]) > 0.0:
 
 sol_vec = np.asarray(sol_list)
 sol_vec_T = np.matrix(sol_vec).T
-target_port_exp_rtn = float(np.asarray(irr_combined_mean_list) * sol_vec_T)
-target_port_stdev = math.sqrt(float((sol_vec * irr_combined_cov_matrix) * sol_vec_T))
+target_port_exp_rtn = float(np.asarray(sml_irr_combined_mean_list) * sol_vec_T)
+target_port_stdev = math.sqrt(float((sol_vec * sml_irr_combined_cov_matrix) * sol_vec_T))
 target_port_sharpe_ratio = float(target_port_exp_rtn / target_port_stdev)
 target_port_kelly_f = float(target_port_exp_rtn / target_port_stdev / target_port_stdev)
-target_port_exp_dollar_rtn_list = map(lambda x: x[0]*x[1]*float(config["general"]["capital"]), zip(sol_list,irr_combined_mean_list))
+target_port_exp_dollar_rtn_list = map(lambda x: x[0]*x[1]*float(config["general"]["capital"]), zip(sol_list,sml_irr_combined_mean_list))
 
 
 ###################################################
@@ -179,7 +182,7 @@ print 100 * "-"
 print "Target  portfolio: E[r] = %s stdev = %s Sharpe ratio = %s Kelly f* = %s" % (justify_str(round(target_port_exp_rtn*100, 3),7) + " %", justify_str(round(target_port_stdev*100,3),7) + " %", justify_str(round(target_port_sharpe_ratio,3),5), justify_str(round(target_port_kelly_f,3),7))
 
 ###################################################
-sym_sol_list = filter(lambda x: abs(x[1]) > 0.001, zip(symbol_list,sol_list))
+sym_sol_list = filter(lambda x: abs(x[1]) > 0.001, zip(symbol_with_enough_fundl_list,sol_list))
 sym_sol_list.extend(map(lambda x: (x,0.0), filter(lambda k: k not in map(lambda y: y[0], sym_sol_list), current_mkt_val_dict.keys())))
 ###################################################
 
@@ -187,7 +190,6 @@ sym_sol_list.extend(map(lambda x: (x,0.0), filter(lambda k: k not in map(lambda 
 # target return
 ###################################################
 print "Target  portfolio: Expected return for 1 year: HKD %s" % (intWithCommas(int(sum(target_port_exp_dollar_rtn_list))))
-# print '\n'.join(map(lambda x: justify_str(x[0],7) + ":  HKD " + justify_str(intWithCommas(int(x[1])),8), filter(lambda y: abs(y[1]) > 1 , sorted(zip(symbol_list,target_port_exp_dollar_rtn_list), key=lambda tup: tup[1], reverse=True))))
 
 print "Target  portfolio: Market value: HKD %s" % (justify_str(intWithCommas(int(float(config["general"]["capital"]))),11))
 if len(current_pos_list) > 0:
