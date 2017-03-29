@@ -4,10 +4,11 @@ import sys
 import math
 from datetime import datetime, timedelta
 import numpy as np
+import cPickle
 
 import os
 sys.path.append(os.path.dirname(sys.path[0]))
-from qvi import CurrencyConverter,calc_cov_matrix_annualized,intWithCommas,justify_str,\
+from qvi import CurrencyConverter,intWithCommas,justify_str,\
                 markowitz_sharpe,log_optimal_growth,read_file,calc_expected_return_before_201703,\
                 get_hist_data_key_sym,get_industry_groups,preprocess_industry_groups
 
@@ -18,6 +19,17 @@ time_check_printout = ["Time taken:"]
 ###################################################
 config = ConfigObj('config.ini')
 config_common = ConfigObj(config["general"]["common_config"])
+
+
+###################################################
+import socket
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.connect(("gmail.com",80))
+local_ip = (s.getsockname()[0])
+s.close()
+prep_data_folder = dict(map(lambda x: x.split(':'), config["general"]["prep_data_folder"]))[local_ip]
+###################################################
+
 
 print "Start reading data..."
 symbol_list = sorted([ i for k in map(lambda x: config["general"][x] if isinstance(config["general"][x], (list, tuple)) else [config["general"][x]], filter(lambda x: "traded_symbols" in x, config["general"].keys())) for i in k ])
@@ -37,21 +49,32 @@ if len(insufficient_data_list) > 0:
 cur_px_dict = dict(map(lambda x: (x[0],float(x[1])), read_file(config["general"]["current_prices"])))
 hist_unadj_px_dict = {}
 hist_unadj_px_dict[datetime.now().date()] = cur_px_dict
-###################################################
-# deprecated
-###################################################
-# expected_rtn_dict = dict(map(lambda x: (x[0],float(x[1])), read_file(config["general"]["expected_return_file"])))
-# expected_rtn_list = map(lambda s: expected_rtn_dict.get(s,0.0), symbol_list)
 
-hist_bps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_bps"])
-hist_totasset_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_totasset"])
-hist_oper_eps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_oper_eps"])
-hist_eps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_eps"])
-hist_roa_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_roa"])
-hist_stattaxrate_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_stattaxrate"])
-hist_operincm_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_operincm"])
-hist_costofdebt_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_costofdebt"])
-hist_totliabps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_totliabps"])
+
+###################################################
+# just reading fundamental data from pickle
+###################################################
+with open(prep_data_folder+"/hist_bps_dict.pkl", "rb") as hist_bps_dict_file:
+    hist_bps_dict = cPickle.load(hist_bps_dict_file)
+with open(prep_data_folder+"/hist_eps_dict.pkl", "rb") as hist_eps_dict_file:
+    hist_eps_dict = cPickle.load(hist_eps_dict_file)
+with open(prep_data_folder+"/hist_roa_dict.pkl", "rb") as hist_roa_dict_file:
+    hist_roa_dict = cPickle.load(hist_roa_dict_file)
+with open(prep_data_folder+"/hist_totliabps_dict.pkl", "rb") as hist_totliabps_dict_file:
+    hist_totliabps_dict = cPickle.load(hist_totliabps_dict_file)
+
+with open(prep_data_folder+"/hist_totasset_dict.pkl", "rb") as hist_totasset_dict_file:
+    hist_totasset_dict = cPickle.load(hist_totasset_dict_file)
+with open(prep_data_folder+"/hist_oper_eps_dict.pkl", "rb") as hist_oper_eps_dict_file:
+    hist_oper_eps_dict = cPickle.load(hist_oper_eps_dict_file)
+with open(prep_data_folder+"/hist_stattaxrate_dict.pkl", "rb") as hist_stattaxrate_dict_file:
+    hist_stattaxrate_dict = cPickle.load(hist_stattaxrate_dict_file)
+with open(prep_data_folder+"/hist_operincm_dict.pkl", "rb") as hist_operincm_dict_file:
+    hist_operincm_dict = cPickle.load(hist_operincm_dict_file)
+with open(prep_data_folder+"/hist_costofdebt_dict.pkl", "rb") as hist_costofdebt_dict_file:
+    hist_costofdebt_dict = cPickle.load(hist_costofdebt_dict_file)
+
+
 
 ###################################################
 ind_grp_list_1 = preprocess_industry_groups(config_common["industry_group"])
@@ -97,15 +120,19 @@ time_check = datetime.now()
 print '\n'.join(map(lambda x: justify_str(x[0],5)+": "+justify_str(round(x[1]*100,2),8)+" %", sorted(expected_rtn_dict.items(),key=lambda x: x[1],reverse=True)))
 
 ###################################################
-aug_cov_matrix,annualized_sd_list,annualized_adj_sd_list = calc_cov_matrix_annualized(sym_time_series_list,debug_mode=True)
-time_check_printout.append("Calculating covariance matrix: %s" % (datetime.now()-time_check))
+time_check_printout.append("Reading covariance matrix: %s" % (datetime.now()-time_check))
+with open(prep_data_folder+"/aug_cov_matrix.pkl", "rb") as aug_cov_matrix_file:
+    aug_cov_matrix = cPickle.load(aug_cov_matrix_file)
+with open(prep_data_folder+"/cov_matrix.pkl", "rb") as cov_matrix_file:
+    cov_matrix = cPickle.load(cov_matrix_file)
+with open(prep_data_folder+"/annualized_sd_list.pkl", "rb") as annualized_sd_list_file:
+    annualized_sd_list = cPickle.load(annualized_sd_list_file)
+with open(prep_data_folder+"/annualized_adj_sd_list.pkl", "rb") as annualized_adj_sd_list_file:
+    annualized_adj_sd_list = cPickle.load(annualized_adj_sd_list_file)
+
 print "Abnormal stdev to check:"
 time_check = datetime.now()
 print '\n'.join(map(lambda ss: ": ".join(map(str, ss)) + " %", filter(lambda x: (x[1] > 50.0) or (x[1] < 10.0), zip(hedging_symbol_list+symbol_list,map(lambda x: round(x*100.0,2), annualized_sd_list)))))
-cov_matrix = aug_cov_matrix
-for i in range(len(hedging_symbol_list)):
-    cov_matrix = np.delete(cov_matrix, 0, 0)
-    cov_matrix = np.delete(cov_matrix, 0, 1)
 
 curcy_converter = CurrencyConverter(config_common["currency_rate"])
 ###################################################

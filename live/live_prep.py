@@ -73,6 +73,10 @@ with open(prep_data_folder+"/aug_cov_matrix.pkl", "wb") as aug_cov_matrix_file:
     cPickle.dump(aug_cov_matrix,aug_cov_matrix_file)
 with open(prep_data_folder+"/cov_matrix.pkl", "wb") as cov_matrix_file:
     cPickle.dump(cov_matrix,cov_matrix_file)
+with open(prep_data_folder+"/annualized_sd_list.pkl", "wb") as annualized_sd_list_file:
+    cPickle.dump(annualized_sd_list,annualized_sd_list_file)
+with open(prep_data_folder+"/annualized_adj_sd_list.pkl", "wb") as annualized_adj_sd_list_file:
+    cPickle.dump(annualized_adj_sd_list,annualized_adj_sd_list_file)
 
 
 ###################################################
@@ -82,6 +86,12 @@ hist_eps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_eps"])
 hist_roa_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_roa"])
 hist_totliabps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_totliabps"])
 
+hist_totasset_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_totasset"])
+hist_oper_eps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_oper_eps"])
+hist_stattaxrate_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_stattaxrate"])
+hist_operincm_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_operincm"])
+hist_costofdebt_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_costofdebt"])
+
 with open(prep_data_folder+"/hist_bps_dict.pkl", "wb") as hist_bps_dict_file:
     cPickle.dump(hist_bps_dict,hist_bps_dict_file)
 with open(prep_data_folder+"/hist_eps_dict.pkl", "wb") as hist_eps_dict_file:
@@ -90,6 +100,18 @@ with open(prep_data_folder+"/hist_roa_dict.pkl", "wb") as hist_roa_dict_file:
     cPickle.dump(hist_roa_dict,hist_roa_dict_file)
 with open(prep_data_folder+"/hist_totliabps_dict.pkl", "wb") as hist_totliabps_dict_file:
     cPickle.dump(hist_totliabps_dict,hist_totliabps_dict_file)
+
+with open(prep_data_folder+"/hist_totasset_dict.pkl", "wb") as hist_totasset_dict_file:
+    cPickle.dump(hist_totasset_dict,hist_totasset_dict_file)
+with open(prep_data_folder+"/hist_oper_eps_dict.pkl", "wb") as hist_oper_eps_dict_file:
+    cPickle.dump(hist_oper_eps_dict,hist_oper_eps_dict_file)
+with open(prep_data_folder+"/hist_stattaxrate_dict.pkl", "wb") as hist_stattaxrate_dict_file:
+    cPickle.dump(hist_stattaxrate_dict,hist_stattaxrate_dict_file)
+with open(prep_data_folder+"/hist_operincm_dict.pkl", "wb") as hist_operincm_dict_file:
+    cPickle.dump(hist_operincm_dict,hist_operincm_dict_file)
+with open(prep_data_folder+"/hist_costofdebt_dict.pkl", "wb") as hist_costofdebt_dict_file:
+    cPickle.dump(hist_costofdebt_dict,hist_costofdebt_dict_file)
+
 print "Finished reading fundamental data... %s" % (datetime.now())
 
 print "Start calc_irr_mean_cov_after_20170309_prep... %s" % (datetime.now())
