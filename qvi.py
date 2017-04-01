@@ -491,6 +491,11 @@ def markowitz_robust(symbol_list,expected_rtn_list,cov_matrix,mu_p,max_weight_li
 ###################################################
 
 def calc_expected_return_before_201703(config,dt,symbol_list,hist_bps_dict,hist_unadj_px_dict,hist_operincm_dict,hist_totasset_dict,hist_totliabps_dict,hist_costofdebt_dict,hist_stattaxrate_dict,hist_oper_eps_dict,hist_eps_dict,hist_roa_dict,delay_months,debug_mode):
+
+    def cal_weighted_avg(a_list):
+        n = len(a_list)
+        return sum(map(lambda x: x[0]*x[1], enumerate(a_list))) / (n*(n-1)/2.0)
+
     curcy_converter = CurrencyConverter(config["currency_rate"])
     ###################################################
     # book-to-price
@@ -510,9 +515,10 @@ def calc_expected_return_before_201703(config,dt,symbol_list,hist_bps_dict,hist_
         ###################################################
         if len(bps_list) >= 3 and sym in hist_unadj_px_dict[dt]:
             bps_r = calc_return_list(bps_list)
-            m = np.sum(bps_r)/(bps_r.size)
-            sd = np.std(bps_r)
-            conser_bp_ratio = max(reporting_curcy_conv_rate * bps_list[-1] * (1 + min(m,0.0) - float(config["general"]["bp_stdev"]) * sd) / price_curcy_conv_rate / hist_unadj_px_dict[dt][sym], 0.0)
+            # m = np.sum(bps_r)/(bps_r.size)
+            # sd = np.std(bps_r)
+            # conser_bp_ratio = max(reporting_curcy_conv_rate * bps_list[-1] * (1 + min(m,0.0) - float(config["general"]["bp_stdev"]) * sd) / price_curcy_conv_rate / hist_unadj_px_dict[dt][sym], 0.0)
+            conser_bp_ratio = max(reporting_curcy_conv_rate * cal_weighted_avg(bps_list) / price_curcy_conv_rate / hist_unadj_px_dict[dt][sym], 0.0)
             conser_bp_ratio_list.append(conser_bp_ratio)
             conser_bp_ratio_dict[sym] = conser_bp_ratio
         else:
@@ -592,14 +598,15 @@ def calc_expected_return_before_201703(config,dt,symbol_list,hist_bps_dict,hist_
             oper_roa_list = sorted(sorted(oper_roa_list,key=lambda x: x[1])[1:][:-1],key=lambda x: x[0])
             oper_roa_list = map(lambda x: x[1], oper_roa_list)
 
-            m = sum(oper_roa_list)/len(oper_roa_list)
-            sd = np.std(np.asarray(oper_roa_list))
-            conser_oper_roa = annualization_factor * (min(m,oper_roa_list[-1]) - float(config["general"]["roa_drvr_stdev"]) * sd)
+            # m = sum(oper_roa_list)/len(oper_roa_list)
+            # sd = np.std(np.asarray(oper_roa_list))
+            # conser_oper_roa = annualization_factor * (min(m,oper_roa_list[-1]) - float(config["general"]["roa_drvr_stdev"]) * sd)
+            conser_oper_roa = annualization_factor * cal_weighted_avg(oper_roa_list)
             if debug_mode:
                 print "oper_roa_list: %s" % oper_roa_list
                 print "annualization_factor: %s" % annualization_factor
-                print "m: %s" % m
-                print "sd: %s" % sd
+                # print "m: %s" % m
+                # print "sd: %s" % sd
                 print "conser_oper_roa (annualized): %s" % conser_oper_roa
         else:
             conser_oper_roa = 0.0
@@ -611,16 +618,17 @@ def calc_expected_return_before_201703(config,dt,symbol_list,hist_bps_dict,hist_
         if len(roa_list) >= 5:
             roa_list = sorted(sorted(roa_list,key=lambda x: x[1])[1:][:-1],key=lambda x: x[0])
             roa_list = map(lambda x: x[1], roa_list)
-            m = sum(roa_list)/len(roa_list)
-            sd = np.std(np.asarray(roa_list))
+            # m = sum(roa_list)/len(roa_list)
+            # sd = np.std(np.asarray(roa_list))
             ###################################################
             # Bloomberg's ROA is already annualized
             ###################################################
-            conser_roa = (min(m,roa_list[-1]) - float(config["general"]["roa_drvr_stdev"]) * sd) / 100.0
+            # conser_roa = (min(m,roa_list[-1]) - float(config["general"]["roa_drvr_stdev"]) * sd) / 100.0
+            conser_roa = cal_weighted_avg(roa_list) / 100.0
             if debug_mode:
                 print "roa_list (annualized %%): %s" % roa_list
-                print "m: %s" % m
-                print "sd: %s" % sd
+                # print "m: %s" % m
+                # print "sd: %s" % sd
                 print "conser_roa (annualized): %s" % conser_roa
         else:
             conser_roa = 0.0
@@ -677,15 +685,16 @@ def calc_expected_return_before_201703(config,dt,symbol_list,hist_bps_dict,hist_
         if len(oper_eps_chg_list) >= 5:
             oper_eps_list = map(lambda z: z[1][1], sorted(sorted(enumerate(oper_eps_list), key=lambda x: x[1][1])[1:][:-1], key=lambda y: y[0]))
             oper_eps_chg_list = sorted(oper_eps_chg_list)[1:][:-1]
-            m = sum(oper_eps_chg_list)/len(oper_eps_chg_list)
-            sd = np.std(np.asarray(oper_eps_chg_list))
-            conser_oper_eps = (oper_eps_list[-1] + min(m,0.0) - float(config["general"]["ext_drvr_stdev"]) * sd) * annualization_factor
+            # m = sum(oper_eps_chg_list)/len(oper_eps_chg_list)
+            # sd = np.std(np.asarray(oper_eps_chg_list))
+            # conser_oper_eps = (oper_eps_list[-1] + min(m,0.0) - float(config["general"]["ext_drvr_stdev"]) * sd) * annualization_factor
+            conser_oper_eps = cal_weighted_avg(oper_eps_list) * annualization_factor
             if debug_mode:
                 print "oper_eps_list: %s" % oper_eps_list
                 print "oper_eps_chg_list: %s" % oper_eps_chg_list
                 print "annualization_factor: %s" % annualization_factor
-                print "m: %s" % m
-                print "sd: %s" % sd
+                # print "m: %s" % m
+                # print "sd: %s" % sd
                 print "conser_oper_eps (annualized): %s" % conser_oper_eps
         else:
             conser_oper_eps = 0.0
@@ -698,15 +707,16 @@ def calc_expected_return_before_201703(config,dt,symbol_list,hist_bps_dict,hist_
         if len(eps_chg_list) >= 5:
             eps_list = map(lambda z: z[1][1], sorted(sorted(enumerate(eps_list), key=lambda x: x[1][1])[1:][:-1], key=lambda y: y[0]))
             eps_chg_list = sorted(eps_chg_list)[1:][:-1]
-            m = sum(eps_chg_list)/len(eps_chg_list)
-            sd = np.std(np.asarray(eps_chg_list))
-            conser_eps = (eps_list[-1] + min(m,0.0) - float(config["general"]["ext_drvr_stdev"]) * sd) * annualization_factor
+            # m = sum(eps_chg_list)/len(eps_chg_list)
+            # sd = np.std(np.asarray(eps_chg_list))
+            # conser_eps = (eps_list[-1] + min(m,0.0) - float(config["general"]["ext_drvr_stdev"]) * sd) * annualization_factor
+            conser_eps = cal_weighted_avg(eps_list) * annualization_factor
             if debug_mode:
                 print "eps_list: %s" % eps_list
                 print "eps_chg_list: %s" % eps_chg_list
                 print "annualization_factor: %s" % annualization_factor
-                print "m: %s" % m
-                print "sd: %s" % sd
+                # print "m: %s" % m
+                # print "sd: %s" % sd
                 print "conser_eps: %s" % conser_eps
         else:
             conser_eps = 0.0
@@ -1064,7 +1074,6 @@ def calc_irr_mean_cov_after_20170309_prep(config,prep_data_folder,dt,symbol_list
         bv_rcvy_rate_dict[sym]  = sum(map(lambda x: x[3], w_a_w_e_bv_list))
         if debug_mode:
             print "sym config: %s" % ' '.join(map(str, [sym, w_a_dict[sym], w_e_dict[sym], bv_rlzn_yr_dict[sym], bv_rcvy_rate_dict[sym]]))
-
     ###################################################
 
     reporting_YM_list = [j for i in map(lambda y: map(lambda m: (1980+y,m), [3,6,9,12]), range(50)) for j in i]
@@ -1187,7 +1196,6 @@ def calc_irr_mean_cov_after_20170309_prep(config,prep_data_folder,dt,symbol_list
         print "cur_roa_list (original currency): %s" % zip(symbol_with_enough_fundl_list,cur_roa_list)
         print "sym_bps_list (original currency): %s" % zip(symbol_with_enough_fundl_list,sym_bps_list)
         print "sym_totliabps_list (original currency): %s" % zip(symbol_with_enough_fundl_list,sym_totliabps_list)
-
 
     ###################################################
     with open(prep_data_folder+"/symbol_with_enough_fundl.pkl", "wb") as symbol_with_enough_fundl_file:

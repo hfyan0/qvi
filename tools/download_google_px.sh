@@ -34,8 +34,12 @@ do
     for SYMBOL in $SYMBOL_LIST
     do
         wget -O $TMPFILE "https://$DOMAIN/finance?q="$EXCHANGE"%3A"$SYMBOL"&hl=en"
-        echo -n "$SYMBOL," >> "$PX_FILE_PREFIX"$e".csv"
-        cat $TMPFILE | grep ref_ | head -n 1 | sed -e 's/<\/.*$//' | sed -e 's/^.*>//' >> "$PX_FILE_PREFIX"$e".csv"
+        CURPX=$(cat $TMPFILE | grep ref_ | head -n 1 | sed -e 's/<\/.*$//' | sed -e 's/^.*>//')
+        if [[ -z $CURPX ]]
+        then
+            CURPX="0.00"
+        fi
+        echo "$SYMBOL,$CURPX" >> "$PX_FILE_PREFIX"$e".csv"
     done
 done
 
