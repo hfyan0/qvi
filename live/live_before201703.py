@@ -62,7 +62,6 @@ with open(prep_data_folder+"/hist_roa_dict.pkl", "rb") as hist_roa_dict_file:
     hist_roa_dict = cPickle.load(hist_roa_dict_file)
 with open(prep_data_folder+"/hist_totliabps_dict.pkl", "rb") as hist_totliabps_dict_file:
     hist_totliabps_dict = cPickle.load(hist_totliabps_dict_file)
-
 with open(prep_data_folder+"/hist_totasset_dict.pkl", "rb") as hist_totasset_dict_file:
     hist_totasset_dict = cPickle.load(hist_totasset_dict_file)
 with open(prep_data_folder+"/hist_oper_eps_dict.pkl", "rb") as hist_oper_eps_dict_file:
@@ -73,8 +72,8 @@ with open(prep_data_folder+"/hist_operincm_dict.pkl", "rb") as hist_operincm_dic
     hist_operincm_dict = cPickle.load(hist_operincm_dict_file)
 with open(prep_data_folder+"/hist_costofdebt_dict.pkl", "rb") as hist_costofdebt_dict_file:
     hist_costofdebt_dict = cPickle.load(hist_costofdebt_dict_file)
-
-
+with open(prep_data_folder+"/hist_outshr_dict.pkl", "rb") as hist_outshr_dict_file:
+    hist_outshr_dict = cPickle.load(hist_outshr_dict_file)
 
 ###################################################
 ind_grp_list_1 = preprocess_industry_groups(config_common["industry_group"])
@@ -87,7 +86,7 @@ time_check_printout.append("Reading config: %s" % (datetime.now()-time_check))
 print "Start calculating expected return:"
 time_check = datetime.now()
 
-expected_rtn_list = calc_expected_return_before_201703(config_common,datetime.now().date(),symbol_list,hist_bps_dict,hist_unadj_px_dict,hist_operincm_dict,hist_totasset_dict,hist_totliabps_dict,hist_costofdebt_dict,hist_stattaxrate_dict,hist_oper_eps_dict,hist_eps_dict,hist_roa_dict,0,True)
+expected_rtn_list = calc_expected_return_before_201703(config_common,datetime.now().date(),symbol_list,hist_bps_dict,hist_unadj_px_dict,hist_operincm_dict,hist_totasset_dict,hist_totliabps_dict,hist_costofdebt_dict,hist_stattaxrate_dict,hist_oper_eps_dict,hist_eps_dict,hist_roa_dict,hist_outshr_dict,0,True)
 expected_rtn_dict = dict(map(lambda x: tuple(x), zip(symbol_list,expected_rtn_list)))
 
 ###################################################

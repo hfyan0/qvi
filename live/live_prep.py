@@ -85,12 +85,12 @@ hist_bps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_bps"])
 hist_eps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_eps"])
 hist_roa_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_roa"])
 hist_totliabps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_totliabps"])
-
 hist_totasset_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_totasset"])
 hist_oper_eps_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_oper_eps"])
 hist_stattaxrate_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_stattaxrate"])
 hist_operincm_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_operincm"])
 hist_costofdebt_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_costofdebt"])
+hist_outshr_dict = get_hist_data_key_sym(config_common["hist_data"]["hist_outshr"])
 
 with open(prep_data_folder+"/hist_bps_dict.pkl", "wb") as hist_bps_dict_file:
     cPickle.dump(hist_bps_dict,hist_bps_dict_file)
@@ -100,7 +100,6 @@ with open(prep_data_folder+"/hist_roa_dict.pkl", "wb") as hist_roa_dict_file:
     cPickle.dump(hist_roa_dict,hist_roa_dict_file)
 with open(prep_data_folder+"/hist_totliabps_dict.pkl", "wb") as hist_totliabps_dict_file:
     cPickle.dump(hist_totliabps_dict,hist_totliabps_dict_file)
-
 with open(prep_data_folder+"/hist_totasset_dict.pkl", "wb") as hist_totasset_dict_file:
     cPickle.dump(hist_totasset_dict,hist_totasset_dict_file)
 with open(prep_data_folder+"/hist_oper_eps_dict.pkl", "wb") as hist_oper_eps_dict_file:
@@ -111,11 +110,13 @@ with open(prep_data_folder+"/hist_operincm_dict.pkl", "wb") as hist_operincm_dic
     cPickle.dump(hist_operincm_dict,hist_operincm_dict_file)
 with open(prep_data_folder+"/hist_costofdebt_dict.pkl", "wb") as hist_costofdebt_dict_file:
     cPickle.dump(hist_costofdebt_dict,hist_costofdebt_dict_file)
+with open(prep_data_folder+"/hist_outshr_dict.pkl", "wb") as hist_outshr_dict_file:
+    cPickle.dump(hist_outshr_dict,hist_outshr_dict_file)
 
 print "Finished reading fundamental data... %s" % (datetime.now())
 
 print "Start calc_irr_mean_cov_after_20170309_prep... %s" % (datetime.now())
-calc_irr_mean_cov_after_20170309_prep(config_common,prep_data_folder,datetime.now().date(),symbol_list,hist_bps_dict,hist_totliabps_dict,hist_eps_dict,hist_roa_dict,int(config["general"]["monte_carlo_num_of_times"]),int(config["general"]["num_of_fut_divd_periods"]),0,True)
+calc_irr_mean_cov_after_20170309_prep(config_common,prep_data_folder,datetime.now().date(),symbol_list,hist_bps_dict,hist_totliabps_dict,hist_eps_dict,hist_roa_dict,hist_outshr_dict,int(config["general"]["monte_carlo_num_of_times"]),int(config["general"]["num_of_fut_divd_periods"]),0,True)
 print "Finished calc_irr_mean_cov_after_20170309_prep... %s" % (datetime.now())
 
 

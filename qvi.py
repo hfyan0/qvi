@@ -75,6 +75,22 @@ def get_hist_data_key_sym(filename):
 def shift_back_n_months(dt,n):
     return dt - timedelta(weeks = float(52.0/12.0*float(n)))
 ###################################################
+def adj_val_per_share_with_no_of_shares(ps_list,no_of_shr_list):
+    sorted_no_of_shr_list = sorted(no_of_shr_list, key=lambda x: x[0])
+    sorted_ps_list        = sorted(ps_list, key=lambda x: x[0])
+
+    if len(sorted_ps_list) == 0 or len(sorted_no_of_shr_list) == 0:
+        return sorted_ps_list
+
+    agg_list = []
+    for dt,val in sorted_ps_list:
+        tmp_list=map(lambda x: x[1], filter(lambda x: x[0]<=dt, sorted_no_of_shr_list))
+        no_of_shr = tmp_list[-1] if len(tmp_list) > 0 else sorted_no_of_shr_list[0][1]
+        agg_list.append((dt,val,no_of_shr))
+
+    # print agg_list
+    return map(lambda x: (x[0],x[1]*x[2]/agg_list[-1][2]), agg_list)
+###################################################
 
 def intWithCommas(x):
     if type(x) not in [type(0), type(0L)]:
@@ -490,7 +506,7 @@ def markowitz_robust(symbol_list,expected_rtn_list,cov_matrix,mu_p,max_weight_li
 
 ###################################################
 
-def calc_expected_return_before_201703(config,dt,symbol_list,hist_bps_dict,hist_unadj_px_dict,hist_operincm_dict,hist_totasset_dict,hist_totliabps_dict,hist_costofdebt_dict,hist_stattaxrate_dict,hist_oper_eps_dict,hist_eps_dict,hist_roa_dict,delay_months,debug_mode):
+def calc_expected_return_before_201703(config,dt,symbol_list,hist_bps_dict,hist_unadj_px_dict,hist_operincm_dict,hist_totasset_dict,hist_totliabps_dict,hist_costofdebt_dict,hist_stattaxrate_dict,hist_oper_eps_dict,hist_eps_dict,hist_roa_dict,hist_outshr_dict,delay_months,debug_mode):
 
     def cal_weighted_avg(a_list):
         n = len(a_list)
@@ -511,7 +527,9 @@ def calc_expected_return_before_201703(config,dt,symbol_list,hist_bps_dict,hist_
         price_curcy_conv_rate = curcy_converter.get_conv_rate_to_hkd(config["price_currency"].get(sym,config["price_currency"]["default"]),dt)
         # print sym,dt,reporting_curcy_conv_rate
 
-        bps_list = map(lambda z: z[1], filter(lambda y: y[0] > shift_back_n_months(dt,5*12+delay_months), filter(lambda x: x[0] <= shift_back_n_months(dt,delay_months), hist_bps_dict.get(sym,[]))))
+        bps_list = filter(lambda y: y[0] > shift_back_n_months(dt,5*12+delay_months), filter(lambda x: x[0] <= shift_back_n_months(dt,delay_months), hist_bps_dict.get(sym,[])))
+        bps_list = adj_val_per_share_with_no_of_shares(bps_list,hist_outshr_dict.get(sym,[]))
+        bps_list = map(lambda x: x[1], bps_list)
         ###################################################
         if len(bps_list) >= 3 and sym in hist_unadj_px_dict[dt]:
             bps_r = calc_return_list(bps_list)
@@ -638,6 +656,7 @@ def calc_expected_return_before_201703(config,dt,symbol_list,hist_bps_dict,hist_
 
         costofdebt_list = filter(lambda x: x[0] <= shift_back_n_months(dt,delay_months), hist_costofdebt_dict.get(sym,[]))
         totliabps_list = filter(lambda x: x[0] <= shift_back_n_months(dt,delay_months), hist_totliabps_dict.get(sym,[]))
+        totliabps_list = adj_val_per_share_with_no_of_shares(totliabps_list,hist_outshr_dict.get(sym,[]))
         if len(costofdebt_list) > 0 and len(totliabps_list) > 0:
             iL = costofdebt_list[-1][1]/100.0 * totliabps_list[-1][1]
         else:
@@ -681,6 +700,7 @@ def calc_expected_return_before_201703(config,dt,symbol_list,hist_bps_dict,hist_
         # external driver: oper_eps
         ###################################################
         oper_eps_list = filter(lambda y: y[0] > shift_back_n_months(dt,12*4+delay_months), filter(lambda x: x[0] <= shift_back_n_months(dt,delay_months), hist_oper_eps_dict.get(sym,[])))
+        oper_eps_list = adj_val_per_share_with_no_of_shares(oper_eps_list,hist_outshr_dict.get(sym,[]))
         oper_eps_chg_list = map(lambda x: x[0][1]-x[1][1], zip(oper_eps_list[1:],oper_eps_list[:-1]))
         if len(oper_eps_chg_list) >= 5:
             oper_eps_list = map(lambda z: z[1][1], sorted(sorted(enumerate(oper_eps_list), key=lambda x: x[1][1])[1:][:-1], key=lambda y: y[0]))
@@ -703,6 +723,7 @@ def calc_expected_return_before_201703(config,dt,symbol_list,hist_bps_dict,hist_
         # external driver: eps
         ###################################################
         eps_list = filter(lambda y: y[0] > shift_back_n_months(dt,12*4+delay_months), filter(lambda x: x[0] <= shift_back_n_months(dt,delay_months), hist_eps_dict.get(sym,[])))
+        eps_list = adj_val_per_share_with_no_of_shares(eps_list,hist_outshr_dict.get(sym,[]))
         eps_chg_list = map(lambda x: x[0][1]-x[1][1], zip(eps_list[1:],eps_list[:-1]))
         if len(eps_chg_list) >= 5:
             eps_list = map(lambda z: z[1][1], sorted(sorted(enumerate(eps_list), key=lambda x: x[1][1])[1:][:-1], key=lambda y: y[0]))
@@ -989,7 +1010,7 @@ def remove_files_in_folder(prep_data_folder):
         os.remove(f)
 
 
-def calc_irr_mean_cov_after_20170309_prep(config,prep_data_folder,dt,symbol_list,hist_bps_dict,hist_totliabps_dict,hist_eps_dict,hist_roa_dict,NUM_OF_MONTE_CARLO,num_of_fut_divd_periods,delay_months,debug_mode):
+def calc_irr_mean_cov_after_20170309_prep(config,prep_data_folder,dt,symbol_list,hist_bps_dict,hist_totliabps_dict,hist_eps_dict,hist_roa_dict,hist_outshr_dict,NUM_OF_MONTE_CARLO,num_of_fut_divd_periods,delay_months,debug_mode):
     def replace_date_with_YM(date_value_list):
         return map(lambda x: ((x[0].year,x[0].month),x[1]), date_value_list)
 
@@ -1082,9 +1103,10 @@ def calc_irr_mean_cov_after_20170309_prep(config,prep_data_folder,dt,symbol_list
     reporting_YM_list = filter(lambda ym: ym <= last_fundl_avb_YM, reporting_YM_list)
 
     sym_aligned_roa_list = map(lambda sym: map(lambda ym: next(iter(filter(lambda x: x[0] == ym, replace_date_with_YM(hist_roa_dict.get(sym,[])))),(ym,None)), reporting_YM_list), symbol_list)
-    sym_aligned_eps_list = map(lambda sym: map(lambda ym: next(iter(filter(lambda x: x[0] == ym, replace_date_with_YM(hist_eps_dict.get(sym,[])))),(ym,None)), reporting_YM_list), symbol_list)
-    sym_aligned_bps_list = map(lambda sym: map(lambda ym: next(iter(filter(lambda x: x[0] == ym, replace_date_with_YM(hist_bps_dict.get(sym,[])))),(ym,None)), reporting_YM_list), symbol_list)
-    sym_aligned_totliabps_list = map(lambda sym: map(lambda ym: next(iter(filter(lambda x: x[0] == ym, replace_date_with_YM(hist_totliabps_dict.get(sym,[])))),(ym,None)), reporting_YM_list), symbol_list)
+
+    sym_aligned_eps_list = map(lambda sym: map(lambda ym: next(iter(filter(lambda x: x[0] == ym, replace_date_with_YM(adj_val_per_share_with_no_of_shares(hist_eps_dict.get(sym,[]),hist_outshr_dict.get(sym,[]))))),(ym,None)), reporting_YM_list), symbol_list)
+    sym_aligned_bps_list = map(lambda sym: map(lambda ym: next(iter(filter(lambda x: x[0] == ym, replace_date_with_YM(adj_val_per_share_with_no_of_shares(hist_bps_dict.get(sym,[]),hist_outshr_dict.get(sym,[]))))),(ym,None)), reporting_YM_list), symbol_list)
+    sym_aligned_totliabps_list = map(lambda sym: map(lambda ym: next(iter(filter(lambda x: x[0] == ym, replace_date_with_YM(adj_val_per_share_with_no_of_shares(hist_totliabps_dict.get(sym,[]),hist_outshr_dict.get(sym,[]))))),(ym,None)), reporting_YM_list), symbol_list)
     # if debug_mode:
     #     print "sym_aligned_eps_list: %s" % (": ".join(map(str, zip(symbol_list,sym_aligned_eps_list))))
 

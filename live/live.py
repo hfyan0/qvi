@@ -10,7 +10,6 @@ import os
 sys.path.append(os.path.dirname(sys.path[0]))
 from qvi import CurrencyConverter,intWithCommas,justify_str,\
                 markowitz_sharpe,log_optimal_growth,read_file,\
-                calc_expected_return_before_201703,\
                 calc_irr_mean_cov_after_20170309_live,\
                 get_hist_data_key_sym,get_industry_groups,preprocess_industry_groups
 
