@@ -35,3 +35,6 @@ fi
 cd $LIVE_FOLDER
 # python calc_expected_return.py
 python live_before201703.py | grep -v Terminated 2>&1
+echo "--------------------------------------------------"
+date
+echo "--------------------------------------------------"
